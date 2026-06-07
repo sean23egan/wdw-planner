@@ -6,7 +6,7 @@ import { daysUntil, formatDate, isTripActive } from '../utils/dates';
 import { totalActual, totalPlanned, formatCurrency } from '../utils/budget';
 import { parseISO, addDays } from 'date-fns';
 import { format } from 'date-fns';
-import { loadTripSnapshot, saveTripSnapshot, saveTripSummaries } from '../lib/sync';
+import { loadTripSnapshot, saveTripSnapshot } from '../lib/sync';
 
 const PARK_COLORS: Record<string, string> = {
   'Magic Kingdom': 'bg-purple-100 text-purple-800',
