@@ -192,7 +192,7 @@ export interface DVCStayOption {
 export interface SpecialEvent {
   id: string;
   name: string;
-  type: 'hard-ticket-party' | 'after-hours' | 'festival';
+  type: 'hard-ticket-party' | 'after-hours' | 'festival' | 'tour';
   dates: string[];
   affectedPark: Park;
   ticketCost?: number;

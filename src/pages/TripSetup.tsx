@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Save, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Save, ChevronDown, Mail, UserPlus } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { useAuth } from '../hooks/useAuth';
 import { generateId } from '../utils/ids';
 import { tripDateRange } from '../utils/dates';
+import { sendTripInvite } from '../lib/sync';
 import type { Park, PartyMember, ParkDay, DiningCounts } from '../types';
 
 const PARKS: Park[] = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom'];
@@ -78,6 +80,7 @@ const DINING_RATES = {
 
 export default function TripSetup() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const trip = useStore((s) => s.trip);
   const parkDays = useStore((s) => s.parkDays);
   const budgetCategories = useStore((s) => s.budgetCategories);
@@ -94,9 +97,13 @@ export default function TripSetup() {
   const [budget, setBudget] = useState(trip?.overallBudget?.toString() ?? '');
   const [notes, setNotes] = useState(trip?.notes ?? '');
   const [partyMembers, setPartyMembers] = useState<PartyMember[]>(trip?.partyMembers ?? []);
+  const [memberEmails, setMemberEmails] = useState<Record<string, string>>({});
   const [diningCounts, setDiningCounts] = useState<DiningCounts>(trip?.diningCounts ?? DEFAULT_DINING);
   const [saved, setSaved] = useState(false);
   const [localParkDays, setLocalParkDays] = useState<ParkDay[]>([]);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareStatus, setShareStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     if (startDate && endDate && startDate <= endDate) {
@@ -119,7 +126,8 @@ export default function TripSetup() {
   }, [startDate, endDate]);
 
   const addPartyMember = () => {
-    setPartyMembers([...partyMembers, { id: generateId(), name: '', role: 'adult' }]);
+    const id = generateId();
+    setPartyMembers([...partyMembers, { id, name: '', role: 'adult' }]);
   };
 
   const updateMember = (id: string, field: 'name' | 'role', value: string) => {
@@ -132,6 +140,16 @@ export default function TripSetup() {
 
   const removeMember = (id: string) => {
     setPartyMembers(partyMembers.filter((m) => m.id !== id));
+    setMemberEmails((prev) => { const next = { ...prev }; delete next[id]; return next; });
+  };
+
+  const handleShareNow = async () => {
+    if (!trip || !shareEmail.trim()) return;
+    setShareStatus('sending');
+    setShareError(null);
+    const { error } = await sendTripInvite(trip.id, trip.name, shareEmail.trim());
+    if (error) { setShareError(error); setShareStatus('error'); }
+    else { setShareStatus('sent'); setShareEmail(''); setTimeout(() => setShareStatus('idle'), 3000); }
   };
 
   const setDC = (field: keyof DiningCounts, value: number | boolean) => {
@@ -153,7 +171,7 @@ export default function TripSetup() {
     );
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name || !startDate || !endDate) return;
 
     const tripId = trip?.id ?? generateId();
@@ -195,6 +213,13 @@ export default function TripSetup() {
         removeParkDay(d.id);
       }
     });
+
+    // Send invites for any party member who had an email filled in
+    const emailsToInvite = Object.values(memberEmails).filter(Boolean);
+    if (emailsToInvite.length > 0 && user) {
+      await Promise.all(emailsToInvite.map((email) => sendTripInvite(tripId, name, email)));
+      setMemberEmails({});
+    }
 
     setSaved(true);
     setTimeout(() => {
@@ -308,31 +333,43 @@ export default function TripSetup() {
         {partyMembers.length === 0 ? (
           <p className="text-gray-400 text-sm">No party members added yet.</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {partyMembers.map((member) => (
-              <div key={member.id} className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={member.name}
-                  onChange={(e) => updateMember(member.id, 'name', e.target.value)}
-                  placeholder="Name"
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <div className="relative w-36 shrink-0">
-                  <select
-                    value={member.role}
-                    onChange={(e) => updateMember(member.id, 'role', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-7"
-                  >
-                    <option value="adult">Adult (10+)</option>
-                    <option value="kid">Kid (3–9)</option>
-                    <option value="toddler">Toddler (0–2)</option>
-                  </select>
-                  <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <div key={member.id} className="space-y-1.5">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={member.name}
+                    onChange={(e) => updateMember(member.id, 'name', e.target.value)}
+                    placeholder="Name"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="relative w-36 shrink-0">
+                    <select
+                      value={member.role}
+                      onChange={(e) => updateMember(member.id, 'role', e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-7"
+                    >
+                      <option value="adult">Adult (10+)</option>
+                      <option value="kid">Kid (3–9)</option>
+                      <option value="toddler">Toddler (0–2)</option>
+                    </select>
+                    <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                  <button onClick={() => removeMember(member.id)} className="text-red-400 hover:text-red-600 p-1 shrink-0">
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-                <button onClick={() => removeMember(member.id)} className="text-red-400 hover:text-red-600 p-1 shrink-0">
-                  <Trash2 size={16} />
-                </button>
+                <div className="flex items-center gap-2 pl-1">
+                  <Mail size={13} className="text-gray-400 shrink-0" />
+                  <input
+                    type="email"
+                    value={memberEmails[member.id] ?? ''}
+                    onChange={(e) => setMemberEmails((prev) => ({ ...prev, [member.id]: e.target.value }))}
+                    placeholder="Email to invite (optional)"
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-gray-400"
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -345,6 +382,40 @@ export default function TripSetup() {
           </div>
         )}
       </div>
+
+      {/* Share trip */}
+      {trip && (
+        <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+          <h2 className="font-bold text-gray-700 flex items-center gap-2">
+            <UserPlus size={16} /> Share Trip
+          </h2>
+          <p className="text-xs text-gray-400">
+            Invite someone by email — they'll see this trip when they sign in. You can also add their email to a party member above and it'll be sent on Save.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={shareEmail}
+              onChange={(e) => setShareEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleShareNow()}
+              placeholder="friend@example.com"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={handleShareNow}
+              disabled={!shareEmail.trim() || shareStatus === 'sending'}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                shareStatus === 'sent' ? 'bg-green-600 text-white' : 'bg-blue-700 text-white hover:bg-blue-800'
+              }`}
+            >
+              {shareStatus === 'sending' ? 'Sending…' : shareStatus === 'sent' ? 'Sent!' : 'Invite'}
+            </button>
+          </div>
+          {shareStatus === 'error' && shareError && (
+            <p className="text-red-500 text-xs">{shareError}</p>
+          )}
+        </div>
+      )}
 
       {/* Dining counts */}
       <div className="bg-white rounded-xl shadow-sm p-4 space-y-4">

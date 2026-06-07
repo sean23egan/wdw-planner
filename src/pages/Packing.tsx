@@ -87,6 +87,43 @@ export default function Packing() {
 
       {tab === 'Packing List' && (
         <div className="space-y-4">
+          {/* Add item */}
+          <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+            <h2 className="font-bold text-gray-700">Add Item</h2>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newItemName.trim()) {
+                    addPackingItem({ id: generateId(), name: newItemName.trim(), category: newItemCat, packed: false });
+                    setNewItemName('');
+                  }
+                }}
+                placeholder="Item name"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <select
+                value={newItemCat}
+                onChange={(e) => setNewItemCat(e.target.value)}
+                className="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {PACKING_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button
+                onClick={() => {
+                  if (!newItemName.trim()) return;
+                  addPackingItem({ id: generateId(), name: newItemName.trim(), category: newItemCat, packed: false });
+                  setNewItemName('');
+                }}
+                className="bg-blue-700 text-white rounded-lg px-3 py-2 hover:bg-blue-800"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
+          </div>
+
           {/* Progress */}
           <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="flex justify-between text-sm text-gray-600 mb-2">
@@ -146,42 +183,6 @@ export default function Packing() {
             );
           })}
 
-          {/* Add item */}
-          <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
-            <h2 className="font-bold text-gray-700">Add Item</h2>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newItemName}
-                onChange={(e) => setNewItemName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newItemName.trim()) {
-                    addPackingItem({ id: generateId(), name: newItemName.trim(), category: newItemCat, packed: false });
-                    setNewItemName('');
-                  }
-                }}
-                placeholder="Item name"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <select
-                value={newItemCat}
-                onChange={(e) => setNewItemCat(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {PACKING_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <button
-                onClick={() => {
-                  if (!newItemName.trim()) return;
-                  addPackingItem({ id: generateId(), name: newItemName.trim(), category: newItemCat, packed: false });
-                  setNewItemName('');
-                }}
-                className="bg-blue-700 text-white rounded-lg px-3 py-2 hover:bg-blue-800"
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

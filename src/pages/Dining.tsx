@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Trash2 } from 'lucide-react';
+import { Plus, X, Trash2, CalendarPlus } from 'lucide-react';
 import { RESTAURANTS } from '../data/restaurants';
 import { useStore } from '../store/useStore';
 import { generateId } from '../utils/ids';
@@ -31,6 +31,9 @@ export default function Dining() {
   const reservations = useStore((s) => s.reservations);
   const addReservation = useStore((s) => s.addReservation);
   const removeReservation = useStore((s) => s.removeReservation);
+  const parkDays = useStore((s) => s.parkDays);
+  const addItineraryItem = useStore((s) => s.addItineraryItem);
+  const itineraryItems = useStore((s) => s.itineraryItems);
 
   // Reservation form state
   const [resDate, setResDate] = useState('');
@@ -38,6 +41,11 @@ export default function Dining() {
   const [resSize, setResSize] = useState('2');
   const [resConfNum, setResConfNum] = useState('');
   const [resNotes, setResNotes] = useState('');
+
+  // Add-to-itinerary modal state
+  const [addItinModal, setAddItinModal] = useState<string | null>(null);
+  const [itinDayId, setItinDayId] = useState('');
+  const [itinTime, setItinTime] = useState('');
 
   const locations = Array.from(new Set(RESTAURANTS.map((r) => r.location))).sort();
 
@@ -73,6 +81,26 @@ export default function Dining() {
     setResSize('2');
     setResConfNum('');
     setResNotes('');
+  };
+
+  const handleAddToItinerary = () => {
+    if (!itinDayId || !addItinModal) return;
+    const restaurant = RESTAURANTS.find((r) => r.id === addItinModal);
+    if (!restaurant) return;
+    const existing = itineraryItems.filter((i) => i.parkDayId === itinDayId).length;
+    addItineraryItem({
+      id: generateId(),
+      parkDayId: itinDayId,
+      type: 'meal',
+      name: restaurant.name,
+      time: itinTime || undefined,
+      lightningLane: false,
+      sortOrder: existing,
+      notes: restaurant.location,
+    });
+    setAddItinModal(null);
+    setItinDayId('');
+    setItinTime('');
   };
 
   const sortedReservations = [...reservations].sort((a, b) => {
@@ -162,14 +190,24 @@ export default function Dining() {
                   ))}
                 </div>
                 {r.description && <p className="text-xs text-gray-500">{r.description}</p>}
-                {r.serviceType !== 'snack' && (
-                  <button
-                    onClick={() => setAddResModal(r.id)}
-                    className="flex items-center justify-center gap-1 bg-blue-50 text-blue-700 rounded-lg py-1.5 text-xs font-medium hover:bg-blue-100 mt-auto"
-                  >
-                    <Plus size={12} /> Add Reservation
-                  </button>
-                )}
+                <div className="flex gap-2 mt-auto">
+                  {r.serviceType !== 'snack' && (
+                    <button
+                      onClick={() => setAddResModal(r.id)}
+                      className="flex-1 flex items-center justify-center gap-1 bg-blue-50 text-blue-700 rounded-lg py-1.5 text-xs font-medium hover:bg-blue-100"
+                    >
+                      <Plus size={12} /> Reservation
+                    </button>
+                  )}
+                  {parkDays.length > 0 && (
+                    <button
+                      onClick={() => { setAddItinModal(r.id); setItinDayId(parkDays[0].id); }}
+                      className="flex-1 flex items-center justify-center gap-1 bg-orange-50 text-orange-700 rounded-lg py-1.5 text-xs font-medium hover:bg-orange-100"
+                    >
+                      <CalendarPlus size={12} /> Itinerary
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -221,6 +259,47 @@ export default function Dining() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Add to Itinerary Modal */}
+      {addItinModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-gray-800">Add to Itinerary</h3>
+              <button onClick={() => { setAddItinModal(null); setItinDayId(''); setItinTime(''); }} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm font-medium text-gray-700">
+              {RESTAURANTS.find((r) => r.id === addItinModal)?.name}
+            </p>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Park Day *</label>
+              <select
+                value={itinDayId}
+                onChange={(e) => setItinDayId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              >
+                {parkDays.map((d) => (
+                  <option key={d.id} value={d.id}>{d.date} — {d.park}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Time (optional)</label>
+              <input type="time" value={itinTime} onChange={(e) => setItinTime(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+            </div>
+            <button
+              onClick={handleAddToItinerary}
+              disabled={!itinDayId}
+              className="w-full bg-orange-500 text-white rounded-lg py-2.5 font-medium hover:bg-orange-600 disabled:opacity-50"
+            >
+              Add to Itinerary
+            </button>
+          </div>
         </div>
       )}
 

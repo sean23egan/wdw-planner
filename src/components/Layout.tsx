@@ -1,7 +1,8 @@
+import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Home, Settings2, Calendar, Star, UtensilsCrossed, Ticket,
-  PartyPopper, ShoppingCart, Hotel, DollarSign, Luggage, Settings,
+  PartyPopper, ShoppingCart, Hotel, DollarSign, Luggage, Settings, MoreHorizontal,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { daysUntil } from '../utils/dates';
@@ -21,6 +22,13 @@ const NAV_ITEMS = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
+const PRIMARY_NAV = [
+  { to: '/', label: 'Home', icon: Home },
+  { to: '/itinerary', label: 'Itinerary', icon: Calendar },
+  { to: '/dining', label: 'Dining', icon: UtensilsCrossed },
+  { to: '/budget', label: 'Budget', icon: DollarSign },
+];
+
 interface LayoutProps {
   children: React.ReactNode;
 }
@@ -28,6 +36,9 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const trip = useStore((s) => s.trip);
   const location = useLocation();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  useEffect(() => { setMoreOpen(false); }, [location.pathname]);
 
   const daysLeft = trip ? daysUntil(trip.startDate) : null;
 
@@ -88,14 +99,14 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Mobile bottom nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
-        <div className="flex overflow-x-auto scrollbar-none">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
+        <div className="flex">
+          {PRIMARY_NAV.map(({ to, label, icon: Icon }) => {
             const isActive = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
             return (
               <NavLink
                 key={to}
                 to={to}
-                className={`flex flex-col items-center justify-center min-w-[64px] py-2 px-1 text-xs font-medium flex-shrink-0 transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center py-2 px-1 text-xs font-medium transition-colors ${
                   isActive ? 'text-blue-700' : 'text-gray-500'
                 }`}
               >
@@ -104,8 +115,47 @@ export default function Layout({ children }: LayoutProps) {
               </NavLink>
             );
           })}
+          <button
+            onClick={() => setMoreOpen(true)}
+            className={`flex-1 flex flex-col items-center justify-center py-2 px-1 text-xs font-medium transition-colors ${
+              moreOpen ? 'text-blue-700' : 'text-gray-500'
+            }`}
+          >
+            <MoreHorizontal size={20} />
+            <span className="mt-0.5 text-[10px]">More</span>
+          </button>
         </div>
       </nav>
+
+      {/* More slide-up drawer */}
+      {moreOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setMoreOpen(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative bg-white rounded-t-2xl p-4 pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+            <div className="grid grid-cols-4 gap-2">
+              {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
+                const isActive = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
+                return (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl text-xs font-medium transition-colors ${
+                      isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 active:bg-gray-100'
+                    }`}
+                  >
+                    <Icon size={22} />
+                    <span className="text-center leading-tight">{label}</span>
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

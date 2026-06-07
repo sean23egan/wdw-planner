@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { Plus, Trash2, CalendarPlus } from 'lucide-react';
-import { SPECIAL_EVENTS_CATALOG } from '../data/specialEvents';
+import { SPECIAL_EVENTS_CATALOG, WDW_TOURS_CATALOG } from '../data/specialEvents';
 import { useStore } from '../store/useStore';
 import { generateId } from '../utils/ids';
 import type { SpecialEvent } from '../types';
 import { formatCurrency } from '../utils/budget';
 
-const TABS = ['Event Finder', 'My Events'] as const;
+const TABS = ['Event Finder', 'Tours', 'My Events'] as const;
 type Tab = typeof TABS[number];
 
 const TYPE_COLORS: Record<SpecialEvent['type'], string> = {
   'hard-ticket-party': 'bg-purple-100 text-purple-700',
   'after-hours': 'bg-blue-100 text-blue-700',
   festival: 'bg-green-100 text-green-700',
+  tour: 'bg-amber-100 text-amber-700',
 };
 
 export default function SpecialEvents() {
@@ -155,6 +156,46 @@ export default function SpecialEvents() {
                   >
                     <Plus size={12} />
                     {alreadyAdded ? 'Added' : 'Add'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === 'Tours' && (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-500 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Tours run year-round (some seasonal). Book directly at DisneyWorld.com or call (407) 939-8687. Prices shown are per person unless noted.
+          </p>
+          {WDW_TOURS_CATALOG.map((tour) => {
+            const alreadyAdded = addedIds.has(tour.id) || specialEvents.some((e) => e.name === tour.name);
+            return (
+              <div key={tour.id} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-800">{tour.name}</h3>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_COLORS[tour.type]}`}>tour</span>
+                      <span className="text-xs text-gray-500">{tour.affectedPark}</span>
+                      {tour.ticketCost && (
+                        <span className="text-xs font-medium text-gray-700">{formatCurrency(tour.ticketCost)}</span>
+                      )}
+                    </div>
+                    {tour.notes && <p className="text-xs text-gray-500 mt-1">{tour.notes}</p>}
+                  </div>
+                  <button
+                    onClick={() => handleAddToTrip(tour)}
+                    disabled={alreadyAdded}
+                    className={`shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                      alreadyAdded
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-amber-500 text-white hover:bg-amber-600'
+                    }`}
+                  >
+                    <Plus size={12} />
+                    {alreadyAdded ? 'Added' : 'Add to Trip'}
                   </button>
                 </div>
               </div>
