@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, CalendarPlus } from 'lucide-react';
+import { Plus, Trash2, CalendarPlus, X } from 'lucide-react';
 import { SPECIAL_EVENTS_CATALOG, WDW_TOURS_CATALOG } from '../data/specialEvents';
 import { useStore } from '../store/useStore';
 import { generateId } from '../utils/ids';
@@ -30,6 +30,11 @@ export default function SpecialEvents() {
 
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
 
+  // Itinerary day-picker modal
+  const [itinEvent, setItinEvent] = useState<SpecialEvent | null>(null);
+  const [itinDayId, setItinDayId] = useState('');
+  const [itinTime, setItinTime] = useState('');
+
   // Check overlap with trip dates
   const eventOverlaps = (event: typeof SPECIAL_EVENTS_CATALOG[0]) => {
     if (!trip) return false;
@@ -58,36 +63,30 @@ export default function SpecialEvents() {
     }
   };
 
-  const handleAddToItinerary = (event: SpecialEvent) => {
-    const matchingDay = parkDays.find((d) =>
-      event.dates.includes(d.date) && d.park === event.affectedPark
-    );
-    if (!matchingDay) {
-      // Add to first available day
-      const firstDay = parkDays[0];
-      if (!firstDay) return;
-      const existing = itineraryItems.filter((i) => i.parkDayId === firstDay.id);
-      addItineraryItem({
-        id: generateId(),
-        parkDayId: firstDay.id,
-        type: 'event',
-        name: event.name,
-        lightningLane: false,
-        sortOrder: existing.length,
-        notes: event.notes,
-      });
-    } else {
-      const existing = itineraryItems.filter((i) => i.parkDayId === matchingDay.id);
-      addItineraryItem({
-        id: generateId(),
-        parkDayId: matchingDay.id,
-        type: 'event',
-        name: event.name,
-        lightningLane: false,
-        sortOrder: existing.length,
-        notes: event.notes,
-      });
-    }
+  const openItinModal = (event: SpecialEvent) => {
+    // Pre-select the best matching day, or default to first
+    const matchingDay = parkDays.find(
+      (d) => event.dates.includes(d.date) && d.park === event.affectedPark
+    ) ?? parkDays[0];
+    setItinEvent(event);
+    setItinDayId(matchingDay?.id ?? '');
+    setItinTime('');
+  };
+
+  const confirmAddToItinerary = () => {
+    if (!itinEvent || !itinDayId) return;
+    const existing = itineraryItems.filter((i) => i.parkDayId === itinDayId).length;
+    addItineraryItem({
+      id: generateId(),
+      parkDayId: itinDayId,
+      type: itinEvent.type === 'tour' ? 'event' : 'event',
+      name: itinEvent.name,
+      time: itinTime || undefined,
+      lightningLane: false,
+      sortOrder: existing,
+      notes: itinEvent.notes,
+    });
+    setItinEvent(null);
   };
 
   return (
@@ -241,17 +240,63 @@ export default function SpecialEvents() {
                   </div>
                 )}
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleAddToItinerary(event)}
-                    className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg font-medium hover:bg-blue-100"
-                  >
-                    <CalendarPlus size={12} /> Add to Itinerary
-                  </button>
-                </div>
+                {parkDays.length > 0 && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openItinModal(event)}
+                      className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg font-medium hover:bg-blue-100"
+                    >
+                      <CalendarPlus size={12} /> Add to Itinerary
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}
+        </div>
+      )}
+      {/* Add to Itinerary day-picker modal */}
+      {itinEvent && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-gray-800">Add to Itinerary</h3>
+              <button onClick={() => setItinEvent(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm font-semibold text-gray-800">{itinEvent.name}</p>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Park Day *</label>
+              <select
+                value={itinDayId}
+                onChange={(e) => setItinDayId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {parkDays.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} — {d.park}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Time (optional)</label>
+              <input
+                type="time"
+                value={itinTime}
+                onChange={(e) => setItinTime(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              onClick={confirmAddToItinerary}
+              disabled={!itinDayId}
+              className="w-full bg-blue-700 text-white rounded-lg py-2.5 font-medium hover:bg-blue-800 disabled:opacity-50"
+            >
+              Add to Itinerary
+            </button>
+          </div>
         </div>
       )}
     </div>

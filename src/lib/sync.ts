@@ -121,6 +121,30 @@ export async function deleteTripData(tripId: string) {
   await supabase.from('app_state').delete().eq('id', tripId);
 }
 
+/** Pick the best trip to load on startup: in-progress first, then soonest upcoming, then most recent past. */
+function pickBestTripId(summaries: TripSummary[], storedActiveId?: string): string | undefined {
+  if (summaries.length === 0) return storedActiveId;
+  const today = new Date().toISOString().split('T')[0];
+
+  // Currently in-progress
+  const inProgress = summaries.filter((s) => s.startDate <= today && s.endDate >= today);
+  if (inProgress.length > 0) return inProgress[0].id;
+
+  // Soonest upcoming
+  const upcoming = summaries
+    .filter((s) => s.startDate > today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  if (upcoming.length > 0) return upcoming[0].id;
+
+  // Most recent past
+  const past = summaries
+    .filter((s) => s.endDate < today)
+    .sort((a, b) => b.endDate.localeCompare(a.endDate));
+  if (past.length > 0) return past[0].id;
+
+  return storedActiveId;
+}
+
 // Load the active trip from Supabase on startup
 export async function loadFromSupabase(): Promise<boolean> {
   if (!supabase) return false;
@@ -133,16 +157,19 @@ export async function loadFromSupabase(): Promise<boolean> {
     useStore.getState().setTripSummaries(summaries);
   }
 
-  // Get activeTripId from summaries row
+  // Get storedActiveTripId from summaries row
   const { data: summData } = await supabase
     .from('app_state')
     .select('data')
     .eq('id', summariesKey(userId))
     .single();
-  const activeTripId = (summData?.data as { activeTripId?: string } | null)?.activeTripId;
+  const storedActiveId = (summData?.data as { activeTripId?: string } | null)?.activeTripId;
 
-  if (activeTripId) {
-    const snapshot = await loadTripSnapshot(activeTripId);
+  // Prefer soonest upcoming / in-progress trip over the stored active
+  const bestId = pickBestTripId(summaries, storedActiveId);
+
+  if (bestId) {
+    const snapshot = await loadTripSnapshot(bestId);
     if (snapshot?.trip) {
       useStore.getState().loadSnapshot(snapshot);
       return true;

@@ -258,7 +258,12 @@ export default function TripSetup() {
             <input
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e) => {
+                const newStart = e.target.value;
+                setStartDate(newStart);
+                // Pre-fill end date so its calendar opens on the same month
+                if (!endDate || endDate < newStart) setEndDate(newStart);
+              }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

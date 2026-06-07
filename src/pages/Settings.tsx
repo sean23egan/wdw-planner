@@ -396,9 +396,9 @@ export default function Settings() {
       )}
 
       {/* Trip management */}
-      <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+      <div className="bg-white rounded-xl shadow-sm p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-700 flex items-center gap-2"><Clock size={16} /> All Trips</h2>
+          <h2 className="font-bold text-gray-700 flex items-center gap-2"><Clock size={16} /> My Trips</h2>
           <button onClick={handleNewTrip} className="flex items-center gap-1 text-sm text-blue-700 font-medium hover:text-blue-800">
             <Plus size={14} /> New Trip
           </button>
@@ -408,16 +408,19 @@ export default function Settings() {
           <p className="text-gray-400 text-sm">No trips saved yet.</p>
         )}
 
-        {tripSummaries
-          .slice()
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-          .map((s) => {
+        {(() => {
+          const today = new Date().toISOString().split('T')[0];
+          const current = tripSummaries.filter((s) => s.startDate <= today && s.endDate >= today);
+          const upcoming = tripSummaries.filter((s) => s.startDate > today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+          const past = tripSummaries.filter((s) => s.endDate < today).sort((a, b) => b.endDate.localeCompare(a.endDate));
+
+          const TripCard = ({ s }: { s: typeof tripSummaries[0] }) => {
             const isActive = s.id === trip?.id;
             return (
               <div key={s.id} className={`rounded-lg border p-3 ${isActive ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {isActive && <span className="text-xs bg-blue-700 text-white px-1.5 py-0.5 rounded font-medium shrink-0">Active</span>}
                       <span className="font-medium text-gray-800 text-sm truncate">{s.name}</span>
                     </div>
@@ -450,7 +453,31 @@ export default function Settings() {
                 </div>
               </div>
             );
-          })}
+          };
+
+          return (
+            <>
+              {current.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">In Progress 🎉</p>
+                  {current.map((s) => <TripCard key={s.id} s={s} />)}
+                </div>
+              )}
+              {upcoming.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Upcoming</p>
+                  {upcoming.map((s) => <TripCard key={s.id} s={s} />)}
+                </div>
+              )}
+              {past.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Past Trips</p>
+                  {past.map((s) => <TripCard key={s.id} s={s} />)}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Data management */}
