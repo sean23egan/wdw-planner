@@ -1,13 +1,23 @@
 import { useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { Download, Upload, AlertTriangle, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Download, Upload, AlertTriangle, Plus, Trash2, Edit2, Check, X, Clock } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { generateId } from '../utils/ids';
+import { formatDate } from '../utils/dates';
+import { deleteTripData, loadTripSnapshot, saveTripSnapshot, saveTripSummaries } from '../lib/sync';
 
 export default function Settings() {
   const trip = useStore((s) => s.trip);
   const setTrip = useStore((s) => s.setTrip);
+  const tripSummaries = useStore((s) => s.tripSummaries);
+  const createNewTrip = useStore((s) => s.createNewTrip);
+  const switchToTrip = useStore((s) => s.switchToTrip);
+  const removeTripSummary = useStore((s) => s.removeTripSummary);
+  const getSnapshot = useStore((s) => s.getSnapshot);
+  const navigate = useNavigate();
   const [showReset, setShowReset] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [switching, setSwitching] = useState<string | null>(null);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editAge, setEditAge] = useState('');
@@ -68,7 +78,31 @@ export default function Settings() {
 
   const handleReset = () => {
     localStorage.removeItem('wdw-planner-storage');
+    localStorage.removeItem('wdw-planner-summaries');
     window.location.reload();
+  };
+
+  const handleNewTrip = () => {
+    createNewTrip();
+    navigate('/setup');
+  };
+
+  const handleSwitchTrip = async (targetId: string) => {
+    if (targetId === trip?.id) return;
+    setSwitching(targetId);
+    if (trip) await saveTripSnapshot(trip.id, getSnapshot());
+    const snapshot = await loadTripSnapshot(targetId);
+    if (snapshot) switchToTrip(snapshot);
+    setSwitching(null);
+    navigate('/');
+  };
+
+  const handleDeleteTrip = async (id: string) => {
+    removeTripSummary(id);
+    await deleteTripData(id);
+    const updated = tripSummaries.filter((s) => s.id !== id);
+    await saveTripSummaries(updated);
+    setDeletingId(null);
   };
 
   const handleAddMember = () => {
@@ -223,6 +257,64 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* Trip management */}
+      <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-gray-700 flex items-center gap-2"><Clock size={16} /> All Trips</h2>
+          <button onClick={handleNewTrip} className="flex items-center gap-1 text-sm text-blue-700 font-medium hover:text-blue-800">
+            <Plus size={14} /> New Trip
+          </button>
+        </div>
+
+        {tripSummaries.length === 0 && (
+          <p className="text-gray-400 text-sm">No trips saved yet.</p>
+        )}
+
+        {tripSummaries
+          .slice()
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .map((s) => {
+            const isActive = s.id === trip?.id;
+            return (
+              <div key={s.id} className={`rounded-lg border p-3 ${isActive ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {isActive && <span className="text-xs bg-blue-700 text-white px-1.5 py-0.5 rounded font-medium shrink-0">Active</span>}
+                      <span className="font-medium text-gray-800 text-sm truncate">{s.name}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {formatDate(s.startDate)} – {formatDate(s.endDate)}
+                      {s.resortName ? ` · ${s.resortName}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!isActive && (
+                      <button
+                        onClick={() => handleSwitchTrip(s.id)}
+                        disabled={switching === s.id}
+                        className="text-xs text-blue-700 font-medium hover:text-blue-800 disabled:opacity-50"
+                      >
+                        {switching === s.id ? 'Loading…' : 'Switch'}
+                      </button>
+                    )}
+                    {deletingId === s.id ? (
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => handleDeleteTrip(s.id)} className="text-xs text-red-600 font-medium">Delete</button>
+                        <button onClick={() => setDeletingId(null)} className="text-gray-400"><X size={12} /></button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setDeletingId(s.id)} className="text-gray-300 hover:text-red-400">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+      </div>
 
       {/* Data management */}
       <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">

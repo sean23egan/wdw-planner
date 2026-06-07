@@ -1,10 +1,12 @@
-import { Link } from 'react-router-dom';
-import { Calendar, DollarSign, CheckSquare, MapPin, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Calendar, DollarSign, CheckSquare, MapPin, ChevronRight, Plus, Clock } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { daysUntil, formatDate, isTripActive } from '../utils/dates';
 import { totalActual, totalPlanned, formatCurrency } from '../utils/budget';
 import { parseISO, addDays } from 'date-fns';
 import { format } from 'date-fns';
+import { loadTripSnapshot, saveTripSnapshot, saveTripSummaries } from '../lib/sync';
 
 const PARK_COLORS: Record<string, string> = {
   'Magic Kingdom': 'bg-purple-100 text-purple-800',
@@ -18,19 +20,68 @@ export default function Dashboard() {
   const parkDays = useStore((s) => s.parkDays);
   const budgetCategories = useStore((s) => s.budgetCategories);
   const preTripTasks = useStore((s) => s.preTripTasks);
+  const tripSummaries = useStore((s) => s.tripSummaries);
+  const createNewTrip = useStore((s) => s.createNewTrip);
+  const switchToTrip = useStore((s) => s.switchToTrip);
+  const getSnapshot = useStore((s) => s.getSnapshot);
+  const navigate = useNavigate();
+  const [switching, setSwitching] = useState<string | null>(null);
+
+  const handleSwitchTrip = async (targetId: string) => {
+    if (targetId === trip?.id) return;
+    setSwitching(targetId);
+    // Save current trip before switching
+    if (trip) {
+      const snapshot = getSnapshot();
+      await saveTripSnapshot(trip.id, snapshot);
+    }
+    // Load target trip
+    const snapshot = await loadTripSnapshot(targetId);
+    if (snapshot) switchToTrip(snapshot);
+    setSwitching(null);
+    navigate('/');
+  };
+
+  const handleNewTrip = () => {
+    createNewTrip();
+    navigate('/setup');
+  };
+
+  const otherTrips = tripSummaries.filter((s) => s.id !== trip?.id);
 
   if (!trip) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <span className="text-6xl mb-4">🏰</span>
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome to WDW Planner</h1>
-        <p className="text-gray-500 mb-6">Set up your trip to start planning your magical vacation.</p>
-        <Link
-          to="/setup"
-          className="bg-blue-700 text-white rounded-lg px-6 py-3 font-medium hover:bg-blue-800 transition-colors"
-        >
-          Set Up Your Trip
-        </Link>
+      <div className="space-y-4">
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <span className="text-6xl mb-4">🏰</span>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome to WDW Planner</h1>
+          <p className="text-gray-500 mb-6">Set up your trip to start planning your magical vacation.</p>
+          <Link
+            to="/setup"
+            className="bg-blue-700 text-white rounded-lg px-6 py-3 font-medium hover:bg-blue-800 transition-colors"
+          >
+            Set Up Your Trip
+          </Link>
+        </div>
+        {otherTrips.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+            <h2 className="font-bold text-gray-700 flex items-center gap-2"><Clock size={16} /> Past Trips</h2>
+            {otherTrips.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => handleSwitchTrip(s.id)}
+                disabled={switching === s.id}
+                className="w-full text-left flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors disabled:opacity-50"
+              >
+                <div>
+                  <div className="font-medium text-gray-800">{s.name}</div>
+                  <div className="text-xs text-gray-500">{formatDate(s.startDate)} – {formatDate(s.endDate)}{s.resortName ? ` · ${s.resortName}` : ''}</div>
+                </div>
+                <ChevronRight size={16} className="text-gray-400 shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -201,6 +252,61 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* My Trips */}
+      <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-gray-800 flex items-center gap-2">
+            <Clock size={18} className="text-blue-700" /> My Trips
+          </h2>
+          <button
+            onClick={handleNewTrip}
+            className="flex items-center gap-1 text-sm text-blue-700 font-medium hover:text-blue-800"
+          >
+            <Plus size={14} /> New Trip
+          </button>
+        </div>
+
+        {/* Current trip highlighted */}
+        <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+          <div className="flex items-center gap-2">
+            <span className="text-xs bg-blue-700 text-white px-1.5 py-0.5 rounded font-medium">Active</span>
+            <span className="font-medium text-gray-800 text-sm">{trip.name}</span>
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5 ml-0">
+            {formatDate(trip.startDate)} – {formatDate(trip.endDate)}
+            {trip.resortName ? ` · ${trip.resortName}` : ''}
+          </div>
+        </div>
+
+        {/* Other trips */}
+        {otherTrips.length > 0 ? (
+          <div className="space-y-2">
+            {otherTrips
+              .slice()
+              .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+              .map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => handleSwitchTrip(s.id)}
+                  disabled={switching === s.id}
+                  className="w-full text-left flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                >
+                  <div>
+                    <div className="font-medium text-gray-800 text-sm">{s.name}</div>
+                    <div className="text-xs text-gray-500">{formatDate(s.startDate)} – {formatDate(s.endDate)}{s.resortName ? ` · ${s.resortName}` : ''}</div>
+                  </div>
+                  {switching === s.id
+                    ? <span className="text-xs text-blue-600 animate-pulse shrink-0">Loading…</span>
+                    : <ChevronRight size={16} className="text-gray-400 shrink-0" />
+                  }
+                </button>
+              ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">No other trips yet. Use "New Trip" to start planning another.</p>
+        )}
+      </div>
     </div>
   );
 }

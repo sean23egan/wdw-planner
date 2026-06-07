@@ -1,4 +1,29 @@
 export type Park = 'Magic Kingdom' | 'EPCOT' | 'Hollywood Studios' | 'Animal Kingdom';
+
+export interface TripSummary {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  resortName?: string;
+  createdAt: string;
+}
+
+export interface TripSnapshot {
+  trip: Trip | null;
+  parkDays: ParkDay[];
+  itineraryItems: ItineraryItem[];
+  budgetCategories: BudgetCategory[];
+  expenses: Expense[];
+  reservations: Reservation[];
+  groceryOrder: GroceryOrder | null;
+  dvcMembership: DVCMembership | null;
+  dvcStayOptions: DVCStayOption[];
+  ticketOptions: TicketOption[];
+  specialEvents: SpecialEvent[];
+  packingItems: PackingItem[];
+  preTripTasks: PreTripTask[];
+}
 export type ServiceType = 'table-service' | 'quick-service' | 'snack';
 export type PriceTier = '$' | '$$' | '$$$' | '$$$$';
 export type TicketType = 'multi-day' | 'annual-pass' | 'mwr';

@@ -3,10 +3,15 @@ import { persist } from 'zustand/middleware';
 import type {
   Trip, ParkDay, ItineraryItem, BudgetCategory, Expense,
   Reservation, GroceryOrder, GroceryItem, DVCMembership, DVCStayOption,
-  TicketOption, SpecialEvent, PackingItem, PreTripTask,
+  TicketOption, SpecialEvent, PackingItem, PreTripTask, TripSummary, TripSnapshot,
 } from '../types';
+import { generateId } from '../utils/ids';
 
 interface AppState {
+  // Multi-trip registry
+  tripSummaries: TripSummary[];
+
+  // Active trip data (full snapshot for the currently loaded trip)
   trip: Trip | null;
   parkDays: ParkDay[];
   itineraryItems: ItineraryItem[];
@@ -65,6 +70,15 @@ interface AppState {
   togglePreTripTask: (id: string) => void;
 
   initializeDefaultData: () => void;
+
+  // Multi-trip management
+  getSnapshot: () => TripSnapshot;
+  loadSnapshot: (snapshot: TripSnapshot) => void;
+  upsertTripSummary: (summary: TripSummary) => void;
+  removeTripSummary: (id: string) => void;
+  createNewTrip: () => void;
+  switchToTrip: (snapshot: TripSnapshot) => void;
+  setTripSummaries: (summaries: TripSummary[]) => void;
 }
 
 const DEFAULT_BUDGET_CATEGORIES: BudgetCategory[] = [
@@ -117,6 +131,7 @@ const DEFAULT_PACKING_ITEMS: PackingItem[] = [
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
+      tripSummaries: [],
       trip: null,
       parkDays: [],
       itineraryItems: [],
@@ -131,7 +146,19 @@ export const useStore = create<AppState>()(
       packingItems: [],
       preTripTasks: [],
 
-      setTrip: (trip) => set({ trip }),
+      setTrip: (trip) => {
+        set({ trip });
+        // Keep the summaries registry in sync
+        const summary: TripSummary = {
+          id: trip.id,
+          name: trip.name,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          resortName: trip.resortName,
+          createdAt: get().tripSummaries.find((s) => s.id === trip.id)?.createdAt ?? new Date().toISOString(),
+        };
+        get().upsertTripSummary(summary);
+      },
 
       addParkDay: (day) => set((s) => ({ parkDays: [...s.parkDays, day] })),
       updateParkDay: (id, updates) =>
@@ -243,6 +270,105 @@ export const useStore = create<AppState>()(
         set((s) => ({
           preTripTasks: s.preTripTasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
         })),
+
+      getSnapshot: (): TripSnapshot => {
+        const s = get();
+        return {
+          trip: s.trip,
+          parkDays: s.parkDays,
+          itineraryItems: s.itineraryItems,
+          budgetCategories: s.budgetCategories,
+          expenses: s.expenses,
+          reservations: s.reservations,
+          groceryOrder: s.groceryOrder,
+          dvcMembership: s.dvcMembership,
+          dvcStayOptions: s.dvcStayOptions,
+          ticketOptions: s.ticketOptions,
+          specialEvents: s.specialEvents,
+          packingItems: s.packingItems,
+          preTripTasks: s.preTripTasks,
+        };
+      },
+
+      loadSnapshot: (snapshot: TripSnapshot) => {
+        set({
+          trip: snapshot.trip,
+          parkDays: snapshot.parkDays ?? [],
+          itineraryItems: snapshot.itineraryItems ?? [],
+          budgetCategories: snapshot.budgetCategories ?? [],
+          expenses: snapshot.expenses ?? [],
+          reservations: snapshot.reservations ?? [],
+          groceryOrder: snapshot.groceryOrder ?? null,
+          dvcMembership: snapshot.dvcMembership ?? null,
+          dvcStayOptions: snapshot.dvcStayOptions ?? [],
+          ticketOptions: snapshot.ticketOptions ?? [],
+          specialEvents: snapshot.specialEvents ?? [],
+          packingItems: snapshot.packingItems ?? [],
+          preTripTasks: snapshot.preTripTasks ?? [],
+        });
+      },
+
+      upsertTripSummary: (summary: TripSummary) =>
+        set((s) => ({
+          tripSummaries: s.tripSummaries.find((t) => t.id === summary.id)
+            ? s.tripSummaries.map((t) => (t.id === summary.id ? summary : t))
+            : [...s.tripSummaries, summary],
+        })),
+
+      removeTripSummary: (id: string) =>
+        set((s) => ({ tripSummaries: s.tripSummaries.filter((t) => t.id !== id) })),
+
+      setTripSummaries: (summaries: TripSummary[]) => set({ tripSummaries: summaries }),
+
+      createNewTrip: () => {
+        // Save current trip snapshot to localStorage before clearing
+        const s = get();
+        if (s.trip) {
+          const snapshot = s.getSnapshot();
+          localStorage.setItem(`wdw-planner-trip-${s.trip.id}`, JSON.stringify(snapshot));
+        }
+        // Clear to fresh state with new default budget categories
+        set({
+          trip: null,
+          parkDays: [],
+          itineraryItems: [],
+          budgetCategories: DEFAULT_BUDGET_CATEGORIES.map((c) => ({ ...c, id: generateId() })),
+          expenses: [],
+          reservations: [],
+          groceryOrder: null,
+          dvcMembership: null,
+          dvcStayOptions: [],
+          ticketOptions: [],
+          specialEvents: [],
+          packingItems: DEFAULT_PACKING_ITEMS.map((p) => ({ ...p, id: generateId() })),
+          preTripTasks: DEFAULT_PRE_TRIP_TASKS.map((t) => ({ ...t, id: generateId() })),
+        });
+      },
+
+      switchToTrip: (snapshot: TripSnapshot) => {
+        // Save current trip to localStorage first
+        const s = get();
+        if (s.trip) {
+          const current = s.getSnapshot();
+          localStorage.setItem(`wdw-planner-trip-${s.trip.id}`, JSON.stringify(current));
+        }
+        // Load the target trip
+        set({
+          trip: snapshot.trip,
+          parkDays: snapshot.parkDays ?? [],
+          itineraryItems: snapshot.itineraryItems ?? [],
+          budgetCategories: snapshot.budgetCategories ?? [],
+          expenses: snapshot.expenses ?? [],
+          reservations: snapshot.reservations ?? [],
+          groceryOrder: snapshot.groceryOrder ?? null,
+          dvcMembership: snapshot.dvcMembership ?? null,
+          dvcStayOptions: snapshot.dvcStayOptions ?? [],
+          ticketOptions: snapshot.ticketOptions ?? [],
+          specialEvents: snapshot.specialEvents ?? [],
+          packingItems: snapshot.packingItems ?? [],
+          preTripTasks: snapshot.preTripTasks ?? [],
+        });
+      },
 
       initializeDefaultData: () => {
         const state = get();
