@@ -20,9 +20,9 @@ export default function Settings() {
   const [switching, setSwitching] = useState<string | null>(null);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
-  const [editAge, setEditAge] = useState('');
+  const [editRole, setEditRole] = useState<'adult' | 'kid' | 'toddler'>('adult');
   const [newMemberName, setNewMemberName] = useState('');
-  const [newMemberAge, setNewMemberAge] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState<'adult' | 'kid' | 'toddler'>('adult');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -111,15 +111,11 @@ export default function Settings() {
       ...trip,
       partyMembers: [
         ...trip.partyMembers,
-        {
-          id: generateId(),
-          name: newMemberName.trim(),
-          age: newMemberAge ? parseInt(newMemberAge) : undefined,
-        },
+        { id: generateId(), name: newMemberName.trim(), role: newMemberRole },
       ],
     });
     setNewMemberName('');
-    setNewMemberAge('');
+    setNewMemberRole('adult');
   };
 
   const handleRemoveMember = (id: string) => {
@@ -135,7 +131,7 @@ export default function Settings() {
     setTrip({
       ...trip,
       partyMembers: trip.partyMembers.map((m) =>
-        m.id === id ? { ...m, name: editName, age: editAge ? parseInt(editAge) : undefined } : m
+        m.id === id ? { ...m, name: editName, role: editRole } : m
       ),
     });
     setEditingMemberId(null);
@@ -197,13 +193,15 @@ export default function Settings() {
                         onChange={(e) => setEditName(e.target.value)}
                         className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
-                      <input
-                        type="number"
-                        value={editAge}
-                        onChange={(e) => setEditAge(e.target.value)}
-                        placeholder="Age"
-                        className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
+                      <select
+                        value={editRole}
+                        onChange={(e) => setEditRole(e.target.value as 'adult' | 'kid' | 'toddler')}
+                        className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="adult">Adult</option>
+                        <option value="kid">Kid</option>
+                        <option value="toddler">Toddler</option>
+                      </select>
                       <button onClick={() => handleSaveMember(member.id)} className="text-green-600 hover:text-green-700">
                         <Check size={16} />
                       </button>
@@ -215,10 +213,10 @@ export default function Settings() {
                     <>
                       <span className="flex-1 text-sm font-medium text-gray-800">
                         {member.name}
-                        {member.age !== undefined && <span className="text-gray-400 ml-1">(age {member.age})</span>}
+                        <span className="text-gray-400 ml-1 capitalize">({member.role ?? 'adult'})</span>
                       </span>
                       <button
-                        onClick={() => { setEditingMemberId(member.id); setEditName(member.name); setEditAge(member.age?.toString() ?? ''); }}
+                        onClick={() => { setEditingMemberId(member.id); setEditName(member.name); setEditRole(member.role ?? 'adult'); }}
                         className="text-gray-400 hover:text-blue-600"
                       >
                         <Edit2 size={14} />
@@ -240,13 +238,15 @@ export default function Settings() {
               placeholder="Name"
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <input
-              type="number"
-              value={newMemberAge}
-              onChange={(e) => setNewMemberAge(e.target.value)}
-              placeholder="Age"
-              className="w-20 border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <select
+              value={newMemberRole}
+              onChange={(e) => setNewMemberRole(e.target.value as 'adult' | 'kid' | 'toddler')}
+              className="w-28 border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="adult">Adult</option>
+              <option value="kid">Kid</option>
+              <option value="toddler">Toddler</option>
+            </select>
             <button
               onClick={handleAddMember}
               disabled={!newMemberName.trim()}

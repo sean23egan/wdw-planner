@@ -33,7 +33,16 @@ export type ItemType = 'attraction' | 'show' | 'meal' | 'break' | 'event';
 export interface PartyMember {
   id: string;
   name: string;
-  age?: number;
+  role: 'adult' | 'kid' | 'toddler';
+}
+
+export interface DiningCounts {
+  qsBreakfasts: number;
+  qsDinners: number;
+  qsDinnerAlcohol: boolean;
+  tsDinners: number;
+  charBreakfasts: number;
+  charDinners: number;
 }
 
 export interface Trip {
@@ -46,6 +55,7 @@ export interface Trip {
   resortName?: string;
   notes?: string;
   giftCardBalance?: number;
+  diningCounts?: DiningCounts;
 }
 
 export interface ParkDay {

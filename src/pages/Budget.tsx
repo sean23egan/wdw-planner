@@ -60,16 +60,17 @@ export default function Budget() {
   const [expDate, setExpDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Dining estimator inputs
-  const adults = trip ? trip.partyMembers.filter((m) => !m.age || m.age >= 10).length : 2;
-  const kids = trip ? trip.partyMembers.filter((m) => m.age !== undefined && m.age < 10).length : 0;
+  const adults = trip ? trip.partyMembers.filter((m) => m.role === 'adult').length : 2;
+  const kids = trip ? trip.partyMembers.filter((m) => m.role === 'kid').length : 0;
   const tripDays = trip ? Math.max(1, tripDateRange(trip.startDate, trip.endDate).length) : 1;
 
-  const [estQSBreakfast, setEstQSBreakfast] = useState(tripDays);
-  const [estQSDinner, setEstQSDinner] = useState(tripDays);
-  const [estQSDinnerAlcohol, setEstQSDinnerAlcohol] = useState(true);
-  const [estTableServiceDinner, setEstTableServiceDinner] = useState(0);
-  const [estCharBfast, setEstCharBfast] = useState(0);
-  const [estCharDinner, setEstCharDinner] = useState(0);
+  const dc = trip?.diningCounts;
+  const [estQSBreakfast, setEstQSBreakfast] = useState(dc?.qsBreakfasts ?? tripDays);
+  const [estQSDinner, setEstQSDinner] = useState(dc?.qsDinners ?? tripDays);
+  const [estQSDinnerAlcohol, setEstQSDinnerAlcohol] = useState(dc?.qsDinnerAlcohol ?? true);
+  const [estTableServiceDinner, setEstTableServiceDinner] = useState(dc?.tsDinners ?? 0);
+  const [estCharBfast, setEstCharBfast] = useState(dc?.charBreakfasts ?? 0);
+  const [estCharDinner, setEstCharDinner] = useState(dc?.charDinners ?? 0);
 
   const diningEstimate =
     estQSBreakfast * (adults * DINING_RATES.qsBreakfastAdult + kids * DINING_RATES.qsBreakfastKid) +
