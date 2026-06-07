@@ -58,12 +58,6 @@ const RESORT_OPTIONS = [
   ]},
 ];
 
-const ROLE_LABELS: Record<PartyMember['role'], string> = {
-  adult: 'Adult (10+)',
-  kid: 'Kid (3–9)',
-  toddler: 'Toddler (0–2)',
-};
-
 const DEFAULT_DINING: DiningCounts = {
   qsBreakfasts: 0,
   qsDinners: 0,
