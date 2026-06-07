@@ -1,12 +1,15 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Download, Upload, AlertTriangle, Plus, Trash2, Edit2, Check, X, Clock } from 'lucide-react';
+import { Download, Upload, AlertTriangle, Plus, Trash2, Edit2, Check, X, Clock, LogOut, UserPlus, Mail } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { useAuth } from '../hooks/useAuth';
 import { generateId } from '../utils/ids';
 import { formatDate } from '../utils/dates';
-import { deleteTripData, loadTripSnapshot, saveTripSnapshot, saveTripSummaries } from '../lib/sync';
+import { deleteTripData, loadTripSnapshot, saveTripSnapshot, saveTripSummaries, sendTripInvite, loadPendingInvites, acceptTripInvite, declineTripInvite } from '../lib/sync';
+import { supabase } from '../lib/supabase';
 
 export default function Settings() {
+  const { user } = useAuth();
   const trip = useStore((s) => s.trip);
   const setTrip = useStore((s) => s.setTrip);
   const tripSummaries = useStore((s) => s.tripSummaries);
@@ -24,6 +27,57 @@ export default function Settings() {
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<'adult' | 'kid' | 'toddler'>('adult');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Invite state
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteStatus, setInviteStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  // Pending invites
+  type PendingInvite = { id: string; trip_id: string; trip_name: string; inviter_email: string | null; status: string; created_at: string };
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadPendingInvites().then(setPendingInvites);
+  }, []);
+
+  const handleSignOut = async () => {
+    if (!supabase) return;
+    // Clear all wdw-planner localStorage keys
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('wdw-planner'))
+      .forEach((k) => localStorage.removeItem(k));
+    await supabase.auth.signOut();
+    window.location.reload();
+  };
+
+  const handleSendInvite = async () => {
+    if (!trip || !inviteEmail.trim()) return;
+    setInviteStatus('sending');
+    setInviteError(null);
+    const { error } = await sendTripInvite(trip.id, trip.name, inviteEmail.trim());
+    if (error) {
+      setInviteError(error);
+      setInviteStatus('error');
+    } else {
+      setInviteStatus('sent');
+      setInviteEmail('');
+      setTimeout(() => setInviteStatus('idle'), 3000);
+    }
+  };
+
+  const handleAcceptInvite = async (invite: PendingInvite) => {
+    setAcceptingId(invite.id);
+    await acceptTripInvite(invite.id, invite.trip_id);
+    setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+    setAcceptingId(null);
+  };
+
+  const handleDeclineInvite = async (inviteId: string) => {
+    await declineTripInvite(inviteId);
+    setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
+  };
 
   const handleExport = () => {
     const state = {
@@ -140,6 +194,89 @@ export default function Settings() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
+
+      {/* Account */}
+      <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+        <h2 className="font-bold text-gray-700">Account</h2>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-800">{user?.user_metadata?.full_name ?? user?.email}</p>
+            <p className="text-xs text-gray-400">{user?.email}</p>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-2 text-sm text-red-500 font-medium hover:text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors"
+          >
+            <LogOut size={14} /> Sign Out
+          </button>
+        </div>
+      </div>
+
+      {/* Pending invites */}
+      {pendingInvites.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+          <h2 className="font-bold text-amber-800 flex items-center gap-2">
+            <Mail size={16} /> Trip Invites ({pendingInvites.length})
+          </h2>
+          {pendingInvites.map((invite) => (
+            <div key={invite.id} className="bg-white rounded-lg border border-amber-100 p-3">
+              <p className="text-sm font-medium text-gray-800">{invite.trip_name}</p>
+              <p className="text-xs text-gray-400 mb-2">
+                Invited by {invite.inviter_email ?? 'someone'}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleAcceptInvite(invite)}
+                  disabled={acceptingId === invite.id}
+                  className="flex-1 bg-blue-700 text-white rounded-lg py-1.5 text-sm font-medium hover:bg-blue-800 disabled:opacity-50"
+                >
+                  {acceptingId === invite.id ? 'Joining…' : 'Accept'}
+                </button>
+                <button
+                  onClick={() => handleDeclineInvite(invite.id)}
+                  className="flex-1 bg-gray-100 text-gray-600 rounded-lg py-1.5 text-sm font-medium hover:bg-gray-200"
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Invite to trip */}
+      {trip && (
+        <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+          <h2 className="font-bold text-gray-700 flex items-center gap-2">
+            <UserPlus size={16} /> Invite to "{trip.name}"
+          </h2>
+          <p className="text-xs text-gray-400">Enter someone's email — they'll see this trip when they sign in.</p>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendInvite()}
+              placeholder="friend@example.com"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={handleSendInvite}
+              disabled={!inviteEmail.trim() || inviteStatus === 'sending'}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                inviteStatus === 'sent'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-blue-700 text-white hover:bg-blue-800'
+              }`}
+            >
+              {inviteStatus === 'sending' ? 'Sending…' : inviteStatus === 'sent' ? 'Sent!' : 'Invite'}
+            </button>
+          </div>
+          {inviteStatus === 'error' && inviteError && (
+            <p className="text-red-500 text-xs">{inviteError}</p>
+          )}
+        </div>
+      )}
 
       {/* Trip summary */}
       <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">

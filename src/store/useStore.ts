@@ -79,6 +79,7 @@ interface AppState {
   createNewTrip: () => void;
   switchToTrip: (snapshot: TripSnapshot) => void;
   setTripSummaries: (summaries: TripSummary[]) => void;
+  clearStore: () => void;
 }
 
 const DEFAULT_BUDGET_CATEGORIES: BudgetCategory[] = [
@@ -369,6 +370,23 @@ export const useStore = create<AppState>()(
           preTripTasks: snapshot.preTripTasks ?? [],
         });
       },
+
+      clearStore: () => set({
+        tripSummaries: [],
+        trip: null,
+        parkDays: [],
+        itineraryItems: [],
+        budgetCategories: [],
+        expenses: [],
+        reservations: [],
+        groceryOrder: null,
+        dvcMembership: null,
+        dvcStayOptions: [],
+        ticketOptions: [],
+        specialEvents: [],
+        packingItems: [],
+        preTripTasks: [],
+      }),
 
       initializeDefaultData: () => {
         const state = get();

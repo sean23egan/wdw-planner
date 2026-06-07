@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
+import AuthScreen from './components/AuthScreen';
 import Dashboard from './pages/Dashboard';
 import TripSetup from './pages/TripSetup';
 import Itinerary from './pages/Itinerary';
@@ -14,23 +15,43 @@ import SpecialEvents from './pages/SpecialEvents';
 import Packing from './pages/Packing';
 import Settings from './pages/Settings';
 import { useStore } from './store/useStore';
+import { useAuth } from './hooks/useAuth';
 import { loadFromSupabase, scheduleSave } from './lib/sync';
 
 export default function App() {
+  const { user, loading } = useAuth();
   const initializeDefaultData = useStore((s) => s.initializeDefaultData);
+  const clearStore = useStore((s) => s.clearStore);
+  const prevUserId = useRef<string | null>(null);
 
   useEffect(() => {
-    // Load from Supabase first; fall back to localStorage defaults
+    if (!user) return;
+    // Clear state when a different user signs in
+    if (prevUserId.current && prevUserId.current !== user.id) {
+      clearStore();
+    }
+    prevUserId.current = user.id;
+
     loadFromSupabase().then((loaded) => {
       if (!loaded) initializeDefaultData();
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Subscribe to store changes and sync to Supabase
   useEffect(() => {
     const unsub = useStore.subscribe(() => scheduleSave());
     return unsub;
   }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-700 to-blue-900 flex items-center justify-center">
+        <div className="text-white text-lg font-medium animate-pulse">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user) return <AuthScreen />;
 
   return (
     <Layout>
