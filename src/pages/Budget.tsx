@@ -573,7 +573,6 @@ export default function Budget() {
                     <div className="font-semibold text-gray-600 text-sm mb-2">Pre/post-trip expenses</div>
                     <div className="space-y-1.5">
                       {offTripExps.map((exp) => {
-                        const cat = budgetCategories.find((c) => c.id === exp.categoryId);
                         return (
                           <div key={exp.id} className="flex items-center gap-2 text-sm">
                             <span className="text-xs text-gray-400">{exp.date}</span>

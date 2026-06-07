@@ -25,7 +25,7 @@ export function scheduleSave() {
       packingItems: state.packingItems,
       preTripTasks: state.preTripTasks,
     };
-    await supabase
+    await supabase!
       .from('app_state')
       .upsert({ id: STATE_ROW_ID, data, updated_at: new Date().toISOString() });
   }, 2000);
