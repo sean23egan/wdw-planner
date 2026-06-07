@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Trash2, CalendarPlus } from 'lucide-react';
+import { Plus, X, Trash2 } from 'lucide-react';
 import { RESTAURANTS } from '../data/restaurants';
 import { useStore } from '../store/useStore';
 import { generateId } from '../utils/ids';
@@ -26,7 +26,6 @@ export default function Dining() {
   const [priceFilter, setPriceFilter] = useState<PriceTier | 'all'>('all');
   const [locationFilter, setLocationFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [addResModal, setAddResModal] = useState<string | null>(null); // restaurantId
 
   const reservations = useStore((s) => s.reservations);
   const addReservation = useStore((s) => s.addReservation);
@@ -35,17 +34,15 @@ export default function Dining() {
   const addItineraryItem = useStore((s) => s.addItineraryItem);
   const itineraryItems = useStore((s) => s.itineraryItems);
 
-  // Reservation form state
-  const [resDate, setResDate] = useState('');
-  const [resTime, setResTime] = useState('');
-  const [resSize, setResSize] = useState('2');
-  const [resConfNum, setResConfNum] = useState('');
-  const [resNotes, setResNotes] = useState('');
-
-  // Add-to-itinerary modal state
-  const [addItinModal, setAddItinModal] = useState<string | null>(null);
-  const [itinDayId, setItinDayId] = useState('');
-  const [itinTime, setItinTime] = useState('');
+  // Single unified "Add to Trip" modal state
+  const [addModal, setAddModal] = useState<string | null>(null); // restaurantId or 'manual'
+  const [modalDayId, setModalDayId] = useState('');   // park day id (when park days exist)
+  const [modalDate, setModalDate] = useState('');     // fallback when no park days
+  const [modalTime, setModalTime] = useState('');
+  const [modalSize, setModalSize] = useState('2');
+  const [modalConf, setModalConf] = useState('');
+  const [modalNotes, setModalNotes] = useState('');
+  const [manualRestaurantName, setManualRestaurantName] = useState('');
 
   const locations = Array.from(new Set(RESTAURANTS.map((r) => r.location))).sort();
 
@@ -59,54 +56,75 @@ export default function Dining() {
     return true;
   });
 
-  const handleAddReservation = (restaurantId: string) => {
-    if (!resDate || !resTime) return;
+  const openAddModal = (restaurantId: string) => {
+    setAddModal(restaurantId);
+    setModalDayId(parkDays.length > 0 ? parkDays[0].id : '');
+    setModalDate('');
+    setModalTime('');
+    setModalSize('2');
+    setModalConf('');
+    setModalNotes('');
+  };
+
+  const closeModal = () => {
+    setAddModal(null);
+    setManualRestaurantName('');
+  };
+
+  const handleSave = () => {
+    if (!addModal) return;
+
+    const restaurant = addModal === 'manual' ? null : RESTAURANTS.find((r) => r.id === addModal);
+    const restaurantName = addModal === 'manual' ? manualRestaurantName.trim() : (restaurant?.name ?? '');
+    if (!restaurantName) return;
+
+    // Determine the date to use
+    const selectedDay = parkDays.find((d) => d.id === modalDayId);
+    const effectiveDate = selectedDay ? selectedDay.date : modalDate;
+    if (!effectiveDate) return;
+
+    // Add to itinerary if we have a park day
+    if (selectedDay) {
+      const existing = itineraryItems.filter((i) => i.parkDayId === selectedDay.id).length;
+      addItineraryItem({
+        id: generateId(),
+        parkDayId: selectedDay.id,
+        type: 'meal',
+        name: restaurantName,
+        time: modalTime || undefined,
+        lightningLane: false,
+        sortOrder: existing,
+        notes: restaurant?.location,
+      });
+    }
+
+    // Always save as a reservation (tracks the booking)
     addReservation({
       id: generateId(),
-      restaurantId,
-      date: resDate,
-      time: resTime,
-      partySize: parseInt(resSize) || 2,
-      confirmationNumber: resConfNum || undefined,
+      restaurantId: addModal === 'manual' ? generateId() : addModal,
+      date: effectiveDate,
+      time: modalTime || '12:00',
+      partySize: parseInt(modalSize) || 2,
+      confirmationNumber: modalConf || undefined,
       status: 'confirmed',
-      notes: resNotes || undefined,
+      notes: modalNotes || undefined,
     });
-    setAddResModal(null);
-    resetResForm();
-  };
 
-  const resetResForm = () => {
-    setResDate('');
-    setResTime('');
-    setResSize('2');
-    setResConfNum('');
-    setResNotes('');
-  };
-
-  const handleAddToItinerary = () => {
-    if (!itinDayId || !addItinModal) return;
-    const restaurant = RESTAURANTS.find((r) => r.id === addItinModal);
-    if (!restaurant) return;
-    const existing = itineraryItems.filter((i) => i.parkDayId === itinDayId).length;
-    addItineraryItem({
-      id: generateId(),
-      parkDayId: itinDayId,
-      type: 'meal',
-      name: restaurant.name,
-      time: itinTime || undefined,
-      lightningLane: false,
-      sortOrder: existing,
-      notes: restaurant.location,
-    });
-    setAddItinModal(null);
-    setItinDayId('');
-    setItinTime('');
+    closeModal();
   };
 
   const sortedReservations = [...reservations].sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     return a.time.localeCompare(b.time);
   });
+
+  const activeRestaurant = addModal && addModal !== 'manual'
+    ? RESTAURANTS.find((r) => r.id === addModal)
+    : null;
+
+  const canSave = addModal === 'manual'
+    ? manualRestaurantName.trim().length > 0 && (modalDayId || modalDate)
+    : (modalDayId || modalDate);
 
   return (
     <div className="space-y-4">
@@ -190,24 +208,14 @@ export default function Dining() {
                   ))}
                 </div>
                 {r.description && <p className="text-xs text-gray-500">{r.description}</p>}
-                <div className="flex gap-2 mt-auto">
-                  {r.serviceType !== 'snack' && (
-                    <button
-                      onClick={() => setAddResModal(r.id)}
-                      className="flex-1 flex items-center justify-center gap-1 bg-blue-50 text-blue-700 rounded-lg py-1.5 text-xs font-medium hover:bg-blue-100"
-                    >
-                      <Plus size={12} /> Reservation
-                    </button>
-                  )}
-                  {parkDays.length > 0 && (
-                    <button
-                      onClick={() => { setAddItinModal(r.id); setItinDayId(parkDays[0].id); }}
-                      className="flex-1 flex items-center justify-center gap-1 bg-orange-50 text-orange-700 rounded-lg py-1.5 text-xs font-medium hover:bg-orange-100"
-                    >
-                      <CalendarPlus size={12} /> Itinerary
-                    </button>
-                  )}
-                </div>
+                {r.serviceType !== 'snack' && (
+                  <button
+                    onClick={() => openAddModal(r.id)}
+                    className="flex items-center justify-center gap-1 bg-blue-50 text-blue-700 rounded-lg py-1.5 text-xs font-medium hover:bg-blue-100 mt-auto"
+                  >
+                    <Plus size={12} /> Add to Trip
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -218,7 +226,7 @@ export default function Dining() {
       {tab === 'Reservations' && (
         <div className="space-y-3">
           <button
-            onClick={() => setAddResModal('manual')}
+            onClick={() => { setAddModal('manual'); setModalDayId(parkDays.length > 0 ? parkDays[0].id : ''); }}
             className="flex items-center gap-2 bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-800"
           >
             <Plus size={16} /> Add Reservation
@@ -262,109 +270,95 @@ export default function Dining() {
         </div>
       )}
 
-      {/* Add to Itinerary Modal */}
-      {addItinModal && (
+      {/* Unified Add to Trip Modal */}
+      {addModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-800">Add to Itinerary</h3>
-              <button onClick={() => { setAddItinModal(null); setItinDayId(''); setItinTime(''); }} className="text-gray-400 hover:text-gray-600">
+              <h3 className="font-bold text-gray-800">Add to Trip</h3>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
-            <p className="text-sm font-medium text-gray-700">
-              {RESTAURANTS.find((r) => r.id === addItinModal)?.name}
-            </p>
-            <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">Park Day *</label>
-              <select
-                value={itinDayId}
-                onChange={(e) => setItinDayId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {parkDays.map((d) => (
-                  <option key={d.id} value={d.id}>{d.date} — {d.park}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">Time (optional)</label>
-              <input type="time" value={itinTime} onChange={(e) => setItinTime(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-            </div>
-            <button
-              onClick={handleAddToItinerary}
-              disabled={!itinDayId}
-              className="w-full bg-orange-500 text-white rounded-lg py-2.5 font-medium hover:bg-orange-600 disabled:opacity-50"
-            >
-              Add to Itinerary
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* Add Reservation Modal */}
-      {addResModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-800">Add Reservation</h3>
-              <button onClick={() => { setAddResModal(null); resetResForm(); }} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-            {addResModal === 'manual' && (
+            {/* Restaurant name */}
+            {addModal === 'manual' ? (
               <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Restaurant Name</label>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Restaurant Name *</label>
                 <input
                   type="text"
+                  value={manualRestaurantName}
+                  onChange={(e) => setManualRestaurantName(e.target.value)}
                   placeholder="Restaurant name"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+            ) : (
+              <p className="text-sm font-semibold text-gray-800">{activeRestaurant?.name}</p>
             )}
-            {addResModal !== 'manual' && (
-              <p className="text-sm font-medium text-gray-700">
-                {RESTAURANTS.find((r) => r.id === addResModal)?.name}
-              </p>
-            )}
-            <div className="grid grid-cols-2 gap-3">
+
+            {/* Park day OR date fallback */}
+            {parkDays.length > 0 ? (
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Park Day *</label>
+                <select
+                  value={modalDayId}
+                  onChange={(e) => setModalDayId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {parkDays.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} — {d.park}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Adds to your itinerary and reservation list.</p>
+              </div>
+            ) : (
               <div>
                 <label className="text-xs font-medium text-gray-600 mb-1 block">Date *</label>
-                <input type="date" value={resDate} onChange={(e) => setResDate(e.target.value)}
+                <input type="date" value={modalDate} onChange={(e) => setModalDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <p className="text-xs text-gray-400 mt-1">Set up park days in Trip Setup to add to itinerary too.</p>
+              </div>
+            )}
+
+            {/* Time + Party Size */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Time</label>
+                <input type="time" value={modalTime} onChange={(e) => setModalTime(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Time *</label>
-                <input type="time" value={resTime} onChange={(e) => setResTime(e.target.value)}
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Party Size</label>
+                <input type="number" value={modalSize} min="1" max="20" onChange={(e) => setModalSize(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
+
+            {/* Confirmation # + Notes */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Party Size</label>
-                <input type="number" value={resSize} min="1" max="20" onChange={(e) => setResSize(e.target.value)}
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Conf #</label>
+                <input type="text" value={modalConf} onChange={(e) => setModalConf(e.target.value)}
+                  placeholder="Optional"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Conf #</label>
-                <input type="text" value={resConfNum} onChange={(e) => setResConfNum(e.target.value)}
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
+                <input type="text" value={modalNotes} onChange={(e) => setModalNotes(e.target.value)}
                   placeholder="Optional"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
-              <input type="text" value={resNotes} onChange={(e) => setResNotes(e.target.value)}
-                placeholder="Optional notes"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
+
             <button
-              onClick={() => handleAddReservation(addResModal)}
-              disabled={!resDate || !resTime}
+              onClick={handleSave}
+              disabled={!canSave}
               className="w-full bg-blue-700 text-white rounded-lg py-2.5 font-medium hover:bg-blue-800 disabled:opacity-50"
             >
-              Save Reservation
+              Save
             </button>
           </div>
         </div>
