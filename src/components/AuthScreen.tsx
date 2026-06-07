@@ -13,22 +13,33 @@ export default function AuthScreen() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase) return;
+    if (!supabase) {
+      setError('App is not connected to Supabase. Check that VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in Vercel environment variables.');
+      return;
+    }
     setLoading(true);
     setError(null);
     setSuccess(null);
 
     if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) {
         setError(error.message);
+      } else if (data.session) {
+        // Email confirmation disabled — signed in immediately
       } else {
-        setSuccess('Account created! Check your email to confirm, then sign in.');
+        setSuccess('Account created! If you need to confirm your email, check your inbox first, then sign in here.');
         setMode('signin');
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setError(error.message);
+      if (error) {
+        if (error.message.toLowerCase().includes('confirm')) {
+          setError('Please confirm your email address first — check your inbox for a confirmation link. Or ask your Supabase admin to disable email confirmation under Authentication → Email.');
+        } else {
+          setError(error.message);
+        }
+      }
     }
     setLoading(false);
   };
