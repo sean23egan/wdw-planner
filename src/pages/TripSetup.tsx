@@ -103,16 +103,39 @@ const MEMORY_MAKER = { passholder: 99, standard: 199 };
 
 // WDW special ticketed events with approximate per-ticket prices (worst-case / typical)
 const SPECIAL_EVENTS_LIST = [
-  { id: 'mnsshp',         name: "Mickey's Not-So-Scary Halloween Party", emoji: '🎃', season: 'Sep–Oct',      price: 155, note: 'Avg ~$109–$189; varies by date' },
-  { id: 'mvmcp',          name: "Mickey's Very Merry Christmas Party",    emoji: '🎄', season: 'Nov–Dec',      price: 155, note: 'Avg ~$109–$189; varies by date' },
+  // Hard-ticket parties
+  { id: 'mnsshp',         name: "Mickey's Not-So-Scary Halloween Party", emoji: '🎃', season: 'Sep–Oct',      price: 155,  note: 'Avg ~$109–$189; varies by date' },
+  { id: 'mvmcp',          name: "Mickey's Very Merry Christmas Party",    emoji: '🎄', season: 'Nov–Dec',      price: 155,  note: 'Avg ~$109–$189; varies by date' },
+  { id: 'jollywood',      name: 'Disney Jollywood Nights (Hollywood Studios)', emoji: '🎬', season: 'Nov–Dec', price: 155, note: 'HS holiday party; ~$109–$189' },
+  // After Hours events
   { id: 'dah-mk',         name: 'Disney After Hours – Magic Kingdom',     emoji: '🏰', season: 'Select nights', price: 155, note: '~$145–$165 per person' },
   { id: 'dah-hs',         name: 'Disney After Hours – Hollywood Studios', emoji: '🎬', season: 'Select nights', price: 145, note: '~$145 per person' },
   { id: 'dah-ak',         name: 'Disney After Hours – Animal Kingdom',    emoji: '🦁', season: 'Select nights', price: 145, note: '~$145 per person' },
-  { id: 'candlelight',    name: 'Candlelight Processional Dining Pkg',    emoji: '🕯️', season: 'Nov–Dec',      price: 110, note: 'Varies by restaurant; ~$60–$200' },
-  { id: 'fireworks-vip',  name: 'Private Fireworks Viewing (group)',      emoji: '🎆', season: 'Year-round',   price: 399, note: 'Flat group rate ~$399; enter 1 ticket' },
-  { id: 'vip-tour',       name: 'VIP Private Tour (7 hr min)',            emoji: '🎩', season: 'Year-round',   price: 2450, note: '~$175–$450/hr × 7 hr; enter 1 ticket' },
-  { id: 'dessert-party',  name: 'Dessert Party / Fireworks Package',      emoji: '🧁', season: 'Year-round',   price: 115, note: '~$99–$135 per person' },
-  { id: 'sunrise',        name: 'Early Morning Magic / Sunrise',          emoji: '🌅', season: 'Select dates', price: 99,  note: '~$89–$109 per person' },
+  // Fireworks / dessert experiences
+  { id: 'dessert-party',  name: 'Dessert Party / Fireworks Package',      emoji: '🧁', season: 'Year-round',   price: 115,  note: '~$99–$135 per person' },
+  { id: 'fireworks-vip',  name: 'Private Fireworks Cruise (group)',       emoji: '🎆', season: 'Year-round',   price: 399,  note: 'Flat group rate ~$399; enter 1 ticket' },
+  // Holiday / seasonal add-ons
+  { id: 'candlelight',    name: 'Candlelight Processional Dining Pkg',    emoji: '🕯️', season: 'Nov–Dec',      price: 110,  note: 'Varies by restaurant; ~$60–$200' },
+  // Morning experiences
+  { id: 'sunrise',        name: 'Early Morning Magic / Sunrise',          emoji: '🌅', season: 'Select dates', price: 99,   note: '~$89–$109 per person' },
+  // Dinner shows
+  { id: 'hoop-dee-doo',   name: 'Hoop-Dee-Doo Musical Revue',            emoji: '🤠', season: 'Year-round',   price: 90,   note: 'Fort Wilderness dinner show; ~$72–$99/adult' },
+  // Creative workshops
+  { id: 'savis',          name: "Savi's Workshop – Handbuilt Lightsabers",emoji: '⚔️', season: 'Year-round',   price: 260,  note: '~$259.99 per lightsaber/person (HS)' },
+  { id: 'droid-depot',    name: 'Droid Depot – Build-a-Droid',            emoji: '🤖', season: 'Year-round',   price: 120,  note: '~$119.99 per droid (HS)' },
+  { id: 'bbb',            name: 'Bibbidi Bobbidi Boutique',               emoji: '👑', season: 'Year-round',   price: 195,  note: 'Makeover; packages ~$75–$450+ per child' },
+  // Tours
+  { id: 'keys-to-kingdom', name: 'Keys to the Kingdom Tour (MK)',         emoji: '🗝️', season: 'Year-round',   price: 110,  note: '~$109/person; adults 16+ only' },
+  { id: 'wild-africa',    name: 'Wild Africa Trek (Animal Kingdom)',       emoji: '🌍', season: 'Year-round',   price: 225,  note: '~$199–$249 per person' },
+  { id: 'backstage-magic', name: 'Backstage Magic Tour (full day)',        emoji: '🎭', season: 'Year-round',   price: 275,  note: '~$275/person; multi-park backstage' },
+  { id: 'behind-seeds',   name: 'Behind the Seeds Tour (EPCOT)',          emoji: '🌱', season: 'Year-round',   price: 30,   note: '~$30/person; Living with the Land greenhouse' },
+  { id: 'trail-ride',     name: 'Fort Wilderness Trail Ride (horseback)', emoji: '🐴', season: 'Year-round',   price: 60,   note: '~$60/person' },
+  // Entertainment
+  { id: 'cirque',         name: 'Cirque du Soleil: Drawn to Life',        emoji: '🎪', season: 'Year-round',   price: 125,  note: 'Disney Springs; ~$89–$179 by section' },
+  // Race events
+  { id: 'rundisney',      name: 'runDisney Race Entry',                   emoji: '🏃', season: 'Varies',       price: 175,  note: '5K ~$75 · 10K ~$100 · Half ~$200+; enter 1 ticket per race' },
+  // VIP
+  { id: 'vip-tour',       name: 'VIP Private Tour (7 hr min)',            emoji: '🎩', season: 'Year-round',   price: 2450, note: '~$175–$450/hr × 7 hr min; enter 1 ticket' },
 ];
 
 // Pricing with tax/tip baked in (matches Budget.tsx DINING_RATES)
