@@ -8,10 +8,6 @@ import { formatDate } from '../utils/dates';
 import { deleteTripData, loadTripSnapshot, saveTripSnapshot, saveTripSummaries, sendTripInvite, loadPendingInvites, acceptTripInvite, declineTripInvite } from '../lib/sync';
 import { supabase } from '../lib/supabase';
 
-// Module-level set: tracks invite IDs dismissed this session so they don't
-// re-appear when Settings remounts even if Supabase RLS delays the status update.
-const _dismissedInviteIds = new Set<string>();
-
 export default function Settings() {
   const { user } = useAuth();
   const trip = useStore((s) => s.trip);
@@ -43,16 +39,16 @@ export default function Settings() {
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadPendingInvites().then((invites) =>
-      setPendingInvites(invites.filter((i) => !_dismissedInviteIds.has(i.id)))
-    );
+    // loadPendingInvites already filters out locally-dismissed invites.
+    loadPendingInvites().then(setPendingInvites);
   }, []);
 
   const handleSignOut = async () => {
     if (!supabase) return;
-    // Clear all wdw-planner localStorage keys
+    // Clear wdw-planner localStorage keys, but keep dismissed-invite tracking so
+    // accepted/declined invites don't reappear after signing back in.
     Object.keys(localStorage)
-      .filter((k) => k.startsWith('wdw-planner'))
+      .filter((k) => k.startsWith('wdw-planner') && k !== 'wdw-planner-dismissed-invites')
       .forEach((k) => localStorage.removeItem(k));
     await supabase.auth.signOut();
     window.location.reload();
@@ -100,16 +96,15 @@ export default function Settings() {
 
   const handleAcceptInvite = async (invite: PendingInvite) => {
     setAcceptingId(invite.id);
-    _dismissedInviteIds.add(invite.id);
-    await acceptTripInvite(invite.id, invite.trip_id);
+    // Optimistically remove; acceptTripInvite persists the dismissal to localStorage.
     setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+    await acceptTripInvite(invite.id, invite.trip_id);
     setAcceptingId(null);
   };
 
   const handleDeclineInvite = async (inviteId: string) => {
-    _dismissedInviteIds.add(inviteId);
-    await declineTripInvite(inviteId);
     setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
+    await declineTripInvite(inviteId);
   };
 
   const handleExport = () => {

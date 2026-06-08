@@ -227,6 +227,31 @@ export async function sendTripInvite(
   return { error: error?.message ?? null };
 }
 
+// Locally-dismissed invites — survive page reloads. This is the source of truth
+// for "the user already acted on this", because the Supabase status update can be
+// blocked by RLS (the invite row is owned by the inviter, not the invitee), which
+// would otherwise leave the invite 'pending' and make it reappear on every reload.
+const DISMISSED_INVITES_KEY = 'wdw-planner-dismissed-invites';
+
+function getDismissedInviteIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DISMISSED_INVITES_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function dismissInviteLocally(inviteId: string) {
+  const ids = getDismissedInviteIds();
+  ids.add(inviteId);
+  try {
+    localStorage.setItem(DISMISSED_INVITES_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
 export async function loadPendingInvites() {
   if (!supabase) return [];
   const session = await getSession();
@@ -237,17 +262,21 @@ export async function loadPendingInvites() {
     .eq('invited_email', session.user.email.toLowerCase())
     .eq('status', 'pending');
   if (error || !data) return [];
-  return data as Array<{
+  const dismissed = getDismissedInviteIds();
+  return (data as Array<{
     id: string;
     trip_id: string;
     trip_name: string;
     inviter_email: string | null;
     status: string;
     created_at: string;
-  }>;
+  }>).filter((inv) => !dismissed.has(inv.id));
 }
 
 export async function acceptTripInvite(inviteId: string, tripId: string) {
+  // Record locally first so the invite never reappears, even if the remote
+  // status update is blocked by RLS or the app closes mid-accept.
+  dismissInviteLocally(inviteId);
   if (!supabase) return;
   const userId = await getCurrentUserId();
   if (!userId) return;
@@ -260,7 +289,7 @@ export async function acceptTripInvite(inviteId: string, tripId: string) {
     invited_by: null,
   });
 
-  // Mark invite accepted
+  // Mark invite accepted (best-effort — may be RLS-restricted to the inviter)
   await supabase.from('trip_invites').update({ status: 'accepted' }).eq('id', inviteId);
 
   // Load the trip and add to this user's summaries
@@ -284,6 +313,8 @@ export async function acceptTripInvite(inviteId: string, tripId: string) {
 }
 
 export async function declineTripInvite(inviteId: string) {
+  // Record locally first (see acceptTripInvite) so it stays dismissed across reloads.
+  dismissInviteLocally(inviteId);
   if (!supabase) return;
   await supabase.from('trip_invites').update({ status: 'declined' }).eq('id', inviteId);
 }
