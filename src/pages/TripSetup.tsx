@@ -84,8 +84,9 @@ const DEFAULT_DINING: DiningCounts = {
 };
 
 // Lightning Lane rates (per person per day, adults + kids only — toddlers don't need LL)
-const LL_MULTI_RATE = 22;   // LL Multi Pass avg
-const LL_SINGLE_RATE = 15;  // LL Individual Attraction Selection avg (1 purchase)
+// Worst-case / peak-season pricing so the budget never comes in short.
+const LL_MULTI_RATE = 39;   // LL Multi Pass — peak holiday top price per person/day
+const LL_SINGLE_RATE = 35;  // LL Single (Individual Lightning Lane) — top-tier attraction per person
 
 // Pricing with tax/tip baked in (matches Budget.tsx DINING_RATES)
 const DINING_RATES = {
@@ -720,7 +721,7 @@ export default function TripSetup() {
             <div className="mt-3 flex items-center justify-between rounded-lg bg-purple-50 border border-purple-100 px-4 py-3">
               <div>
                 <span className="text-sm font-medium text-purple-800">Estimated Lightning Lane Total</span>
-                <p className="text-xs text-purple-500 mt-0.5">LL Multi ~$22/person/day · LL Single ~$15/person/attraction</p>
+                <p className="text-xs text-purple-500 mt-0.5">Worst-case: LL Multi ~$39/person/day · LL Single ~$35/person/attraction</p>
               </div>
               <span className="text-lg font-bold text-purple-900">
                 ${llEstimate.toLocaleString('en-US', { maximumFractionDigits: 0 })}

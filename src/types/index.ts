@@ -57,6 +57,7 @@ export interface Trip {
   resortName?: string;
   notes?: string;
   giftCardBalance?: number;
+  savedCash?: number;
   diningCounts?: DiningCounts;
   arrivalTransport?: TransportMode;
   departureTransport?: TransportMode;

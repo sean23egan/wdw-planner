@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, CreditCard, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, CreditCard, RotateCcw, PiggyBank } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend,
 } from 'recharts';
@@ -46,15 +46,23 @@ export default function Budget() {
     ])
   );
 
+  // A category is automatically "paid off" once its logged expenses cover its planned amount.
+  const isCatPaidOff = (c: { id: string; plannedAmount: number }) =>
+    c.plannedAmount > 0 && (catActuals[c.id] ?? 0) >= c.plannedAmount;
+
   const planned = totalPlanned(budgetCategories);
   const actual = Object.values(catActuals).reduce((a, b) => a + b, 0);
   const totalBudget = trip?.overallBudget ?? 0;
   const giftCards = trip?.giftCardBalance ?? 0;
+  const savedCash = trip?.savedCash ?? 0;
+  const totalSaved = savedCash + giftCards;
   const paidOffTotal = budgetCategories
-    .filter((c) => c.paidOff)
+    .filter((c) => isCatPaidOff(c))
     .reduce((sum, c) => sum + c.plannedAmount, 0);
   const stillOwed = Math.max(0, planned - paidOffTotal - giftCards);
   const pct = totalBudget > 0 ? Math.min(100, (actual / totalBudget) * 100) : 0;
+  const budgetTarget = totalBudget || planned;
+  const savedPct = budgetTarget > 0 ? Math.min(100, (totalSaved / budgetTarget) * 100) : 0;
 
   const chartData = budgetCategories
     .filter((c) => c.plannedAmount > 0 || catActuals[c.id] > 0)
@@ -187,6 +195,56 @@ export default function Budget() {
             </div>
           </div>
 
+          {/* Savings tracker */}
+          <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+            <h2 className="font-bold text-gray-700 flex items-center gap-2">
+              <PiggyBank size={16} /> Saved So Far
+            </h2>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Cash saved up</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 text-xs">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={savedCash || ''}
+                    placeholder="0.00"
+                    onChange={(e) => {
+                      if (trip) setTrip({ ...trip, savedCash: parseFloat(e.target.value) || 0 });
+                    }}
+                    className="w-24 border border-gray-300 rounded px-2 py-0.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Gift cards</span>
+                <span className="font-semibold text-gray-700">{formatCurrency(giftCards)}</span>
+              </div>
+              <div className="border-t pt-2 flex justify-between font-bold">
+                <span>Total saved</span>
+                <span className="text-green-700">{formatCurrency(totalSaved)}</span>
+              </div>
+            </div>
+
+            <div className="bg-gray-100 rounded-full h-4">
+              <div
+                className={`h-4 rounded-full transition-all ${savedPct >= 100 ? 'bg-green-500' : 'bg-emerald-400'}`}
+                style={{ width: `${savedPct}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>{savedPct.toFixed(0)}% of {formatCurrency(budgetTarget)} {totalBudget ? 'budget' : 'planned'}</span>
+              <span>
+                {totalSaved >= budgetTarget
+                  ? '🎉 Fully funded!'
+                  : `${formatCurrency(budgetTarget - totalSaved)} to go`}
+              </span>
+            </div>
+          </div>
+
           {/* Charts */}
           {chartData.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-4">
@@ -229,15 +287,19 @@ export default function Budget() {
           {budgetCategories.map((cat) => {
             const catActual = catActuals[cat.id] ?? 0;
             const catPct = cat.plannedAmount > 0 ? Math.min(100, (catActual / cat.plannedAmount) * 100) : 0;
+            const isOver = cat.plannedAmount > 0 && catActual > cat.plannedAmount;
+            const isPaid = isCatPaidOff(cat);
             return (
-              <div key={cat.id} className={`bg-white rounded-xl shadow-sm p-4 border ${cat.paidOff ? 'border-green-200' : 'border-transparent'}`}>
+              <div key={cat.id} className={`bg-white rounded-xl shadow-sm p-4 border ${isOver ? 'border-red-200' : isPaid ? 'border-green-200' : 'border-transparent'}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {cat.icon && <span>{cat.icon}</span>}
                     <span className="font-semibold text-gray-800 truncate">{cat.name}</span>
-                    {cat.paidOff && (
+                    {isOver ? (
+                      <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-medium shrink-0">OVER</span>
+                    ) : isPaid ? (
                       <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium shrink-0">PAID</span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {editingCatId === cat.id ? (
@@ -283,27 +345,20 @@ export default function Budget() {
                 </div>
                 <div className="bg-gray-100 rounded-full h-2 mb-2">
                   <div
-                    className={`h-2 rounded-full ${cat.paidOff ? 'bg-green-500' : catPct > 100 ? 'bg-red-500' : catPct > 80 ? 'bg-amber-500' : 'bg-blue-600'}`}
-                    style={{ width: `${cat.paidOff ? 100 : Math.min(catPct, 100)}%` }}
+                    className={`h-2 rounded-full ${isOver ? 'bg-red-500' : isPaid ? 'bg-green-500' : catPct > 80 ? 'bg-amber-500' : 'bg-blue-600'}`}
+                    style={{ width: `${Math.min(catPct, 100)}%` }}
                   />
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="text-xs text-gray-400">
                     {cat.plannedAmount > 0 ? `${catPct.toFixed(0)}% of planned` : 'No budget set'}
-                    {catActual > cat.plannedAmount && cat.plannedAmount > 0 && (
+                    {isOver && (
                       <span className="text-red-500 ml-2">Over by {formatCurrency(catActual - cat.plannedAmount)}</span>
                     )}
                   </div>
-                  <button
-                    onClick={() => updateBudgetCategory(cat.id, { paidOff: !cat.paidOff })}
-                    className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                      cat.paidOff
-                        ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-600'
-                        : 'bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700'
-                    }`}
-                  >
-                    {cat.paidOff ? '✓ Paid off' : 'Mark paid off'}
-                  </button>
+                  {isPaid && !isOver && (
+                    <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">✓ Paid off</span>
+                  )}
                 </div>
               </div>
             );

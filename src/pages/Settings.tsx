@@ -58,6 +58,31 @@ export default function Settings() {
     window.location.reload();
   };
 
+  // Connected accounts / identity linking
+  const identities = user?.identities ?? [];
+  const hasGoogle = identities.some((i) => i.provider === 'google');
+  const hasEmailLogin = identities.some((i) => i.provider === 'email');
+  const [linkStatus, setLinkStatus] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+
+  const handleConnectGoogle = async () => {
+    if (!supabase) return;
+    setLinkStatus(null);
+    const { error } = await supabase.auth.linkIdentity({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) setLinkStatus(error.message);
+  };
+
+  const handleSetPassword = async () => {
+    if (!supabase || newPassword.length < 6) return;
+    setLinkStatus(null);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) setLinkStatus(error.message);
+    else { setLinkStatus('Password set — you can now sign in with email too.'); setNewPassword(''); }
+  };
+
   const handleSendInvite = async () => {
     if (!trip || !inviteEmail.trim()) return;
     setInviteStatus('sending');
@@ -217,6 +242,53 @@ export default function Settings() {
           >
             <LogOut size={14} /> Sign Out
           </button>
+        </div>
+
+        {/* Connected accounts / linking */}
+        <div className="border-t pt-3 space-y-2">
+          <p className="text-xs font-medium text-gray-500">Sign-in methods</p>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-700 flex items-center gap-2">
+              <span className="text-base">🔵</span> Google
+            </span>
+            {hasGoogle ? (
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">Connected</span>
+            ) : (
+              <button onClick={handleConnectGoogle} className="text-xs text-blue-700 font-medium hover:text-blue-800 border border-blue-200 rounded-lg px-3 py-1 hover:bg-blue-50">
+                Connect
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-700 flex items-center gap-2">
+              <span className="text-base">✉️</span> Email &amp; password
+            </span>
+            {hasEmailLogin ? (
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">Connected</span>
+            ) : (
+              <span className="text-xs text-gray-400">Set a password below</span>
+            )}
+          </div>
+          {!hasEmailLogin && (
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Create a password (min 6)"
+                minLength={6}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={handleSetPassword}
+                disabled={newPassword.length < 6}
+                className="bg-blue-700 text-white rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-blue-800 disabled:opacity-50"
+              >
+                Set
+              </button>
+            </div>
+          )}
+          {linkStatus && <p className="text-xs text-gray-500">{linkStatus}</p>}
         </div>
       </div>
 

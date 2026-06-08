@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
 import { GROCERY_STARTER } from '../data/groceryTemplates';
 import { useStore } from '../store/useStore';
@@ -84,12 +84,15 @@ export default function Groceries() {
   const items = groceryOrder?.items ?? [];
   const total = items.reduce((sum, i) => sum + i.quantity * i.estimatedUnitPrice, 0);
 
-  const handleAddToBudget = () => {
-    const cat = budgetCategories.find((c) => c.id === 'bc-groceries' || c.name.toLowerCase().includes('grocery'));
-    if (cat) {
-      updateBudgetCategory(cat.id, { plannedAmount: total });
+  // Auto-sync the grocery total into the Groceries budget category (no manual step).
+  const groceryCat = budgetCategories.find((c) => c.id === 'bc-groceries' || c.name.toLowerCase().includes('grocery'));
+  const groceryCatId = groceryCat?.id;
+  const groceryCatPlanned = groceryCat?.plannedAmount;
+  useEffect(() => {
+    if (groceryCatId && groceryCatPlanned !== total) {
+      updateBudgetCategory(groceryCatId, { plannedAmount: total });
     }
-  };
+  }, [total, groceryCatId, groceryCatPlanned, updateBudgetCategory]);
 
   const toggleCat = (cat: string) => {
     setExpandedCats((prev) => {
@@ -158,12 +161,9 @@ export default function Groceries() {
           <ShoppingCart size={16} /> Load Starter Template
         </button>
         {items.length > 0 && (
-          <button
-            onClick={handleAddToBudget}
-            className="flex items-center gap-2 bg-green-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-green-700"
-          >
-            Add to Budget
-          </button>
+          <span className="flex items-center gap-1.5 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2 font-medium">
+            ✓ {formatCurrency(total)} synced to Groceries budget
+          </span>
         )}
       </div>
 
