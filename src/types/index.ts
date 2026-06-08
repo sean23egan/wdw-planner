@@ -66,7 +66,9 @@ export interface Trip {
   wantsGroceries?: boolean;
   wantsMemoryMaker?: boolean;
   anyPassholder?: boolean;
-  specialEventsBudget?: number;
+  specialEventsBudget?: number;        // computed total saved on each save
+  selectedSpecialEvents?: { id: string; tickets: number }[];  // structured picker selections
+  otherEventsBudget?: number;          // manual "other events" amount
   golfers?: number;
   golfRounds?: GolfTier[];
   snackBudget?: number;

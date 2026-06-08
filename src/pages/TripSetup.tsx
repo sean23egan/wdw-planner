@@ -101,6 +101,20 @@ const GOLF_TIERS: Record<GolfTier, { label: string; rate: number }> = {
 };
 const MEMORY_MAKER = { passholder: 99, standard: 199 };
 
+// WDW special ticketed events with approximate per-ticket prices (worst-case / typical)
+const SPECIAL_EVENTS_LIST = [
+  { id: 'mnsshp',         name: "Mickey's Not-So-Scary Halloween Party", emoji: '🎃', season: 'Sep–Oct',      price: 155, note: 'Avg ~$109–$189; varies by date' },
+  { id: 'mvmcp',          name: "Mickey's Very Merry Christmas Party",    emoji: '🎄', season: 'Nov–Dec',      price: 155, note: 'Avg ~$109–$189; varies by date' },
+  { id: 'dah-mk',         name: 'Disney After Hours – Magic Kingdom',     emoji: '🏰', season: 'Select nights', price: 155, note: '~$145–$165 per person' },
+  { id: 'dah-hs',         name: 'Disney After Hours – Hollywood Studios', emoji: '🎬', season: 'Select nights', price: 145, note: '~$145 per person' },
+  { id: 'dah-ak',         name: 'Disney After Hours – Animal Kingdom',    emoji: '🦁', season: 'Select nights', price: 145, note: '~$145 per person' },
+  { id: 'candlelight',    name: 'Candlelight Processional Dining Pkg',    emoji: '🕯️', season: 'Nov–Dec',      price: 110, note: 'Varies by restaurant; ~$60–$200' },
+  { id: 'fireworks-vip',  name: 'Private Fireworks Viewing (group)',      emoji: '🎆', season: 'Year-round',   price: 399, note: 'Flat group rate ~$399; enter 1 ticket' },
+  { id: 'vip-tour',       name: 'VIP Private Tour (7 hr min)',            emoji: '🎩', season: 'Year-round',   price: 2450, note: '~$175–$450/hr × 7 hr; enter 1 ticket' },
+  { id: 'dessert-party',  name: 'Dessert Party / Fireworks Package',      emoji: '🧁', season: 'Year-round',   price: 115, note: '~$99–$135 per person' },
+  { id: 'sunrise',        name: 'Early Morning Magic / Sunrise',          emoji: '🌅', season: 'Select dates', price: 99,  note: '~$89–$109 per person' },
+];
+
 // Pricing with tax/tip baked in (matches Budget.tsx DINING_RATES)
 const DINING_RATES = {
   qsBreakfastAdult: 22, qsBreakfastKid: 13,
@@ -136,8 +150,13 @@ export default function TripSetup() {
   const [wantsGroceries, setWantsGroceries] = useState(trip?.wantsGroceries ?? false);
   const [wantsMemoryMaker, setWantsMemoryMaker] = useState(trip?.wantsMemoryMaker ?? false);
   const [anyPassholder, setAnyPassholder] = useState(trip?.anyPassholder ?? false);
-  const [wantsSpecialEvents, setWantsSpecialEvents] = useState((trip?.specialEventsBudget ?? 0) > 0);
-  const [specialEventsBudget, setSpecialEventsBudget] = useState((trip?.specialEventsBudget ?? 0).toString());
+  const [wantsSpecialEvents, setWantsSpecialEvents] = useState(
+    (trip?.selectedSpecialEvents?.length ?? 0) > 0 || (trip?.otherEventsBudget ?? 0) > 0
+  );
+  const [selectedSpecialEvents, setSelectedSpecialEvents] = useState<{ id: string; tickets: number }[]>(
+    trip?.selectedSpecialEvents ?? []
+  );
+  const [otherEventsBudget, setOtherEventsBudget] = useState((trip?.otherEventsBudget ?? 0).toString());
   const [wantsGolf, setWantsGolf] = useState((trip?.golfRounds?.length ?? 0) > 0);
   const [golfers, setGolfers] = useState((trip?.golfers ?? 1).toString());
   const [golfRounds, setGolfRounds] = useState<GolfTier[]>(trip?.golfRounds ?? []);
@@ -237,7 +256,12 @@ export default function TripSetup() {
   const golfEstimate = wantsGolf
     ? Math.max(1, parseInt(golfers) || 0) * golfRounds.reduce((s, t) => s + GOLF_TIERS[t].rate, 0)
     : 0;
-  const specialEventsEstimate = wantsSpecialEvents ? Math.max(0, parseFloat(specialEventsBudget) || 0) : 0;
+  const specialEventsEstimate = wantsSpecialEvents
+    ? selectedSpecialEvents.reduce((sum, sel) => {
+        const ev = SPECIAL_EVENTS_LIST.find((e) => e.id === sel.id);
+        return sum + (ev ? sel.tickets * ev.price : 0);
+      }, 0) + Math.max(0, parseFloat(otherEventsBudget) || 0)
+    : 0;
   const snackEstimate = Math.max(0, parseFloat(snackBudget) || 0);
   const souvenirEstimate = Math.max(0, parseFloat(souvenirBudget) || 0);
 
@@ -302,6 +326,8 @@ export default function TripSetup() {
       wantsMemoryMaker,
       anyPassholder,
       specialEventsBudget: specialEventsEstimate,
+      selectedSpecialEvents,
+      otherEventsBudget: Math.max(0, parseFloat(otherEventsBudget) || 0),
       golfers: Math.max(1, parseInt(golfers) || 0),
       golfRounds,
       snackBudget: snackEstimate,
@@ -841,17 +867,96 @@ export default function TripSetup() {
         <div className="border-b border-gray-100 pb-3">
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-sm font-medium text-gray-700">🎉 Special events / tours / parties?</span>
-            <input type="checkbox" checked={wantsSpecialEvents} onChange={(e) => setWantsSpecialEvents(e.target.checked)} className="rounded w-4 h-4 accent-blue-700" />
+            <input
+              type="checkbox"
+              checked={wantsSpecialEvents}
+              onChange={(e) => setWantsSpecialEvents(e.target.checked)}
+              className="rounded w-4 h-4 accent-blue-700"
+            />
           </label>
           {wantsSpecialEvents && (
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-sm text-gray-500">Budget $</span>
-              <input
-                type="number" min="0" value={specialEventsBudget}
-                onChange={(e) => setSpecialEventsBudget(e.target.value)}
-                placeholder="0"
-                className="w-32 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <div className="mt-3 space-y-2">
+              {SPECIAL_EVENTS_LIST.map((event) => {
+                const sel = selectedSpecialEvents.find((s) => s.id === event.id);
+                const isSelected = !!sel;
+                const defaultTickets = Math.max(1, partyMembers.filter((m) => m.role !== 'toddler').length);
+                return (
+                  <div
+                    key={event.id}
+                    className={`border rounded-lg p-2.5 transition-colors ${isSelected ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'}`}
+                  >
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSpecialEvents([...selectedSpecialEvents, { id: event.id, tickets: defaultTickets }]);
+                          } else {
+                            setSelectedSpecialEvents(selectedSpecialEvents.filter((s) => s.id !== event.id));
+                          }
+                        }}
+                        className="rounded accent-blue-700 mt-0.5 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium text-gray-700">{event.emoji} {event.name}</span>
+                          <span className="text-xs text-gray-400 shrink-0">{event.season}</span>
+                        </div>
+                        {!isSelected && (
+                          <p className="text-xs text-gray-400 mt-0.5">~${event.price.toLocaleString('en-US')}/ticket · {event.note}</p>
+                        )}
+                      </div>
+                    </label>
+                    {isSelected && (
+                      <div className="mt-2 pl-6 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-gray-500 shrink-0">Tickets:</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={sel.tickets}
+                            onChange={(e) => {
+                              const n = Math.max(1, parseInt(e.target.value) || 1);
+                              setSelectedSpecialEvents(
+                                selectedSpecialEvents.map((s) =>
+                                  s.id === event.id ? { ...s, tickets: n } : s
+                                )
+                              );
+                            }}
+                            className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <span className="text-xs text-gray-500">
+                            × ~${event.price.toLocaleString('en-US')} ={' '}
+                            <strong className="text-gray-800">${(sel.tickets * event.price).toLocaleString('en-US')}</strong>
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400">{event.note}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Other / not listed */}
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-sm text-gray-500 shrink-0">Other / not listed $</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={otherEventsBudget}
+                  onChange={(e) => setOtherEventsBudget(e.target.value)}
+                  placeholder="0"
+                  className="w-28 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {specialEventsEstimate > 0 && (
+                <div className="flex items-center justify-between rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 mt-1">
+                  <span className="text-sm font-medium text-amber-800">Special Events Total</span>
+                  <span className="text-base font-bold text-amber-900">${specialEventsEstimate.toLocaleString('en-US')}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
