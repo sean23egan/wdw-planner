@@ -8,6 +8,10 @@ import { formatDate } from '../utils/dates';
 import { deleteTripData, loadTripSnapshot, saveTripSnapshot, saveTripSummaries, sendTripInvite, loadPendingInvites, acceptTripInvite, declineTripInvite } from '../lib/sync';
 import { supabase } from '../lib/supabase';
 
+// Module-level set: tracks invite IDs dismissed this session so they don't
+// re-appear when Settings remounts even if Supabase RLS delays the status update.
+const _dismissedInviteIds = new Set<string>();
+
 export default function Settings() {
   const { user } = useAuth();
   const trip = useStore((s) => s.trip);
@@ -39,7 +43,9 @@ export default function Settings() {
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadPendingInvites().then(setPendingInvites);
+    loadPendingInvites().then((invites) =>
+      setPendingInvites(invites.filter((i) => !_dismissedInviteIds.has(i.id)))
+    );
   }, []);
 
   const handleSignOut = async () => {
@@ -69,12 +75,14 @@ export default function Settings() {
 
   const handleAcceptInvite = async (invite: PendingInvite) => {
     setAcceptingId(invite.id);
+    _dismissedInviteIds.add(invite.id);
     await acceptTripInvite(invite.id, invite.trip_id);
     setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
     setAcceptingId(null);
   };
 
   const handleDeclineInvite = async (inviteId: string) => {
+    _dismissedInviteIds.add(inviteId);
     await declineTripInvite(inviteId);
     setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
   };

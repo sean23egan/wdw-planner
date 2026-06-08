@@ -18,7 +18,7 @@ const NAV_ITEMS = [
   { to: '/groceries', label: 'Groceries', icon: ShoppingCart },
   { to: '/lodging', label: 'Lodging', icon: Hotel },
   { to: '/budget', label: 'Budget', icon: DollarSign },
-  { to: '/packing', label: 'Packing', icon: Luggage },
+  { to: '/packing', label: 'Prep & Pack', icon: Luggage },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 

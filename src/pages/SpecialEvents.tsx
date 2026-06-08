@@ -30,10 +30,12 @@ export default function SpecialEvents() {
 
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
 
-  // Itinerary day-picker modal
+  // Day-picker modal — works for both catalog items (new) and existing My Events
   const [itinEvent, setItinEvent] = useState<SpecialEvent | null>(null);
   const [itinDayId, setItinDayId] = useState('');
   const [itinTime, setItinTime] = useState('');
+  // When true, confirming will also call addSpecialEvent (item not yet in My Events)
+  const [itinIsNew, setItinIsNew] = useState(false);
 
   // Check overlap with trip dates
   const eventOverlaps = (event: typeof SPECIAL_EVENTS_CATALOG[0]) => {
@@ -41,51 +43,48 @@ export default function SpecialEvents() {
     return event.dates.some((d) => d >= trip.startDate && d <= trip.endDate);
   };
 
-  const handleAddToTrip = (event: typeof SPECIAL_EVENTS_CATALOG[0]) => {
-    addSpecialEvent({
-      id: generateId(),
-      name: event.name,
-      type: event.type,
-      dates: event.dates,
-      affectedPark: event.affectedPark,
-      ticketCost: event.ticketCost,
-      notes: event.notes,
-      festivalBoothNotes: event.festivalBoothNotes,
-    });
-    setAddedIds((prev) => new Set([...prev, event.id]));
-
-    // Update budget
-    if (event.ticketCost) {
-      const cat = budgetCategories.find((c) => c.id === 'bc-events' || c.name.toLowerCase().includes('event'));
-      if (cat) {
-        updateBudgetCategory(cat.id, { plannedAmount: cat.plannedAmount + event.ticketCost });
+  // Open modal for a catalog item — if no park days, just add to My Events directly
+  const openAddModal = (event: SpecialEvent & { id: string }) => {
+    if (parkDays.length === 0) {
+      // No park days yet — just add to My Events, no itinerary scheduling
+      addSpecialEvent({ id: generateId(), name: event.name, type: event.type, dates: event.dates, affectedPark: event.affectedPark, ticketCost: event.ticketCost, notes: event.notes, festivalBoothNotes: event.festivalBoothNotes });
+      setAddedIds((prev) => new Set([...prev, event.id]));
+      if (event.ticketCost) {
+        const cat = budgetCategories.find((c) => c.id === 'bc-events' || c.name.toLowerCase().includes('event'));
+        if (cat) updateBudgetCategory(cat.id, { plannedAmount: cat.plannedAmount + event.ticketCost });
       }
+      return;
     }
-  };
-
-  const openItinModal = (event: SpecialEvent) => {
-    // Pre-select the best matching day, or default to first
-    const matchingDay = parkDays.find(
-      (d) => event.dates.includes(d.date) && d.park === event.affectedPark
-    ) ?? parkDays[0];
+    const matchingDay = parkDays.find((d) => event.dates.includes(d.date) && d.park === event.affectedPark) ?? parkDays[0];
     setItinEvent(event);
     setItinDayId(matchingDay?.id ?? '');
     setItinTime('');
+    setItinIsNew(true);
   };
 
-  const confirmAddToItinerary = () => {
+  // Open modal for an existing My Events item
+  const openItinModal = (event: SpecialEvent) => {
+    const matchingDay = parkDays.find((d) => event.dates.includes(d.date) && d.park === event.affectedPark) ?? parkDays[0];
+    setItinEvent(event);
+    setItinDayId(matchingDay?.id ?? '');
+    setItinTime('');
+    setItinIsNew(false);
+  };
+
+  const confirmAdd = () => {
     if (!itinEvent || !itinDayId) return;
+    // If new catalog item, add to My Events first
+    if (itinIsNew) {
+      addSpecialEvent({ id: generateId(), name: itinEvent.name, type: itinEvent.type, dates: itinEvent.dates, affectedPark: itinEvent.affectedPark, ticketCost: itinEvent.ticketCost, notes: itinEvent.notes, festivalBoothNotes: itinEvent.festivalBoothNotes });
+      setAddedIds((prev) => new Set([...prev, itinEvent.id]));
+      if (itinEvent.ticketCost) {
+        const cat = budgetCategories.find((c) => c.id === 'bc-events' || c.name.toLowerCase().includes('event'));
+        if (cat) updateBudgetCategory(cat.id, { plannedAmount: cat.plannedAmount + itinEvent.ticketCost });
+      }
+    }
+    // Add to itinerary
     const existing = itineraryItems.filter((i) => i.parkDayId === itinDayId).length;
-    addItineraryItem({
-      id: generateId(),
-      parkDayId: itinDayId,
-      type: itinEvent.type === 'tour' ? 'event' : 'event',
-      name: itinEvent.name,
-      time: itinTime || undefined,
-      lightningLane: false,
-      sortOrder: existing,
-      notes: itinEvent.notes,
-    });
+    addItineraryItem({ id: generateId(), parkDayId: itinDayId, type: 'event', name: itinEvent.name, time: itinTime || undefined, lightningLane: false, sortOrder: existing, notes: itinEvent.notes });
     setItinEvent(null);
   };
 
@@ -145,7 +144,7 @@ export default function SpecialEvents() {
                     )}
                   </div>
                   <button
-                    onClick={() => handleAddToTrip(event)}
+                    onClick={() => openAddModal(event)}
                     disabled={alreadyAdded}
                     className={`shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
                       alreadyAdded
@@ -185,7 +184,7 @@ export default function SpecialEvents() {
                     {tour.notes && <p className="text-xs text-gray-500 mt-1">{tour.notes}</p>}
                   </div>
                   <button
-                    onClick={() => handleAddToTrip(tour)}
+                    onClick={() => openAddModal(tour)}
                     disabled={alreadyAdded}
                     className={`shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
                       alreadyAdded
@@ -194,7 +193,7 @@ export default function SpecialEvents() {
                     }`}
                   >
                     <Plus size={12} />
-                    {alreadyAdded ? 'Added' : 'Add to Trip'}
+                    {alreadyAdded ? 'Added' : 'Add'}
                   </button>
                 </div>
               </div>
@@ -255,12 +254,12 @@ export default function SpecialEvents() {
           )}
         </div>
       )}
-      {/* Add to Itinerary day-picker modal */}
+      {/* Day-picker modal (Add to itinerary / Add to trip) */}
       {itinEvent && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-800">Add to Itinerary</h3>
+              <h3 className="font-bold text-gray-800">{itinIsNew ? 'Add to Trip & Itinerary' : 'Add to Itinerary'}</h3>
               <button onClick={() => setItinEvent(null)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
@@ -290,11 +289,11 @@ export default function SpecialEvents() {
               />
             </div>
             <button
-              onClick={confirmAddToItinerary}
+              onClick={confirmAdd}
               disabled={!itinDayId}
               className="w-full bg-blue-700 text-white rounded-lg py-2.5 font-medium hover:bg-blue-800 disabled:opacity-50"
             >
-              Add to Itinerary
+              {itinIsNew ? 'Add to Trip & Itinerary' : 'Add to Itinerary'}
             </button>
           </div>
         </div>

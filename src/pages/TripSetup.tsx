@@ -6,7 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { generateId } from '../utils/ids';
 import { tripDateRange } from '../utils/dates';
 import { sendTripInvite } from '../lib/sync';
-import type { Park, PartyMember, ParkDay, DiningCounts } from '../types';
+import type { Park, PartyMember, ParkDay, DiningCounts, LLChoice } from '../types';
 
 const PARKS: Park[] = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom'];
 
@@ -68,6 +68,10 @@ const DEFAULT_DINING: DiningCounts = {
   charBreakfasts: 0,
   charDinners: 0,
 };
+
+// Lightning Lane rates (per person per day, adults + kids only — toddlers don't need LL)
+const LL_MULTI_RATE = 22;   // LL Multi Pass avg
+const LL_SINGLE_RATE = 15;  // LL Individual Attraction Selection avg (1 purchase)
 
 // Pricing with tax/tip baked in (matches Budget.tsx DINING_RATES)
 const DINING_RATES = {
@@ -171,6 +175,19 @@ export default function TripSetup() {
     );
   };
 
+  // LL estimate: adults + kids count (toddlers skip LL), sum by park day choice
+  const computeLLEstimate = (members: PartyMember[], days: ParkDay[]) => {
+    const pax = members.filter((m) => m.role === 'adult' || m.role === 'kid').length;
+    if (pax === 0) return 0;
+    return days.reduce((sum, day) => {
+      const choice = day.llChoice ?? 'none';
+      if (choice === 'multi') return sum + pax * LL_MULTI_RATE;
+      if (choice === 'single') return sum + pax * LL_SINGLE_RATE;
+      if (choice === 'both') return sum + pax * (LL_MULTI_RATE + LL_SINGLE_RATE);
+      return sum;
+    }, 0);
+  };
+
   const handleSave = async () => {
     if (!name || !startDate || !endDate) return;
 
@@ -199,11 +216,22 @@ export default function TripSetup() {
       }
     }
 
+    // Auto-update Lightning Lane budget category
+    const llEst = computeLLEstimate(partyMembers, localParkDays);
+    if (llEst > 0) {
+      const llCat = budgetCategories.find(
+        (c) => c.name.toLowerCase().includes('lightning') || c.name.toLowerCase().includes(' ll')
+      );
+      if (llCat) {
+        updateBudgetCategory(llCat.id, { plannedAmount: Math.round(llEst) });
+      }
+    }
+
     // Sync park days
     const existingIds = parkDays.map((d) => d.id);
     localParkDays.forEach((day) => {
       if (existingIds.includes(day.id)) {
-        updateParkDay(day.id, { park: day.park, isHopDay: day.isHopDay, hopToPark: day.hopToPark, hopTime: day.hopTime });
+        updateParkDay(day.id, { park: day.park, isHopDay: day.isHopDay, hopToPark: day.hopToPark, hopTime: day.hopTime, llChoice: day.llChoice });
       } else {
         addParkDay({ ...day, tripId });
       }
@@ -229,6 +257,7 @@ export default function TripSetup() {
   };
 
   const diningEstimate = computeDiningEstimate(partyMembers, diningCounts);
+  const llEstimate = computeLLEstimate(partyMembers, localParkDays);
 
   return (
     <div className="space-y-6">
@@ -575,9 +604,46 @@ export default function TripSetup() {
                     />
                   </div>
                 )}
+                {/* Lightning Lane choice */}
+                <div className="flex items-center gap-1.5 pt-1">
+                  <span className="text-xs text-gray-500 w-28 shrink-0">Lightning Lane:</span>
+                  <div className="flex gap-1">
+                    {(['none', 'multi', 'single', 'both'] as LLChoice[]).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => {
+                          const updated = [...localParkDays];
+                          updated[idx] = { ...day, llChoice: opt };
+                          setLocalParkDays(updated);
+                        }}
+                        className={`text-xs px-2 py-1 rounded-lg font-medium border transition-colors ${
+                          (day.llChoice ?? 'none') === opt
+                            ? opt === 'none'
+                              ? 'bg-gray-200 text-gray-700 border-gray-300'
+                              : 'bg-blue-700 text-white border-blue-700'
+                            : 'bg-white text-gray-500 border-gray-200 hover:border-blue-400'
+                        }`}
+                      >
+                        {opt === 'none' ? 'None' : opt === 'multi' ? 'LL Multi' : opt === 'single' ? 'LL Single' : 'Both'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
+          {llEstimate > 0 && (
+            <div className="mt-3 flex items-center justify-between rounded-lg bg-purple-50 border border-purple-100 px-4 py-3">
+              <div>
+                <span className="text-sm font-medium text-purple-800">Estimated Lightning Lane Total</span>
+                <p className="text-xs text-purple-500 mt-0.5">LL Multi ~$22/person/day · LL Single ~$15/person/attraction</p>
+              </div>
+              <span className="text-lg font-bold text-purple-900">
+                ${llEstimate.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
