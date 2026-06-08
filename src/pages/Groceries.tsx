@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
 import { GROCERY_STARTER } from '../data/groceryTemplates';
 import { useStore } from '../store/useStore';
 import { generateId } from '../utils/ids';
-import { formatCurrency } from '../utils/budget';
 
 const CATEGORIES = ['breakfast', 'snacks', 'drinks', 'kids', 'paper-goods'];
 
@@ -14,14 +13,11 @@ export default function Groceries() {
   const addGroceryItem = useStore((s) => s.addGroceryItem);
   const updateGroceryItem = useStore((s) => s.updateGroceryItem);
   const removeGroceryItem = useStore((s) => s.removeGroceryItem);
-  const budgetCategories = useStore((s) => s.budgetCategories);
-  const updateBudgetCategory = useStore((s) => s.updateBudgetCategory);
 
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set(CATEGORIES));
   const [newName, setNewName] = useState('');
   const [newCat, setNewCat] = useState('snacks');
   const [newQty, setNewQty] = useState('1');
-  const [newPrice, setNewPrice] = useState('');
 
   // Delivery info
   const [deliveryDate, setDeliveryDate] = useState(groceryOrder?.deliveryDate ?? '');
@@ -63,11 +59,10 @@ export default function Groceries() {
       name: newName.trim(),
       category: newCat,
       quantity: parseInt(newQty) || 1,
-      estimatedUnitPrice: parseFloat(newPrice) || 0,
+      estimatedUnitPrice: 0,
     });
     setNewName('');
     setNewQty('1');
-    setNewPrice('');
   };
 
   const handleSaveDelivery = () => {
@@ -82,17 +77,7 @@ export default function Groceries() {
   };
 
   const items = groceryOrder?.items ?? [];
-  const total = items.reduce((sum, i) => sum + i.quantity * i.estimatedUnitPrice, 0);
-
-  // Auto-sync the grocery total into the Groceries budget category (no manual step).
-  const groceryCat = budgetCategories.find((c) => c.id === 'bc-groceries' || c.name.toLowerCase().includes('grocery'));
-  const groceryCatId = groceryCat?.id;
-  const groceryCatPlanned = groceryCat?.plannedAmount;
-  useEffect(() => {
-    if (groceryCatId && groceryCatPlanned !== total) {
-      updateBudgetCategory(groceryCatId, { plannedAmount: total });
-    }
-  }, [total, groceryCatId, groceryCatPlanned, updateBudgetCategory]);
+  const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
 
   const toggleCat = (cat: string) => {
     setExpandedCats((prev) => {
@@ -107,7 +92,10 @@ export default function Groceries() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-gray-800">Groceries</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-800">Groceries</h1>
+        <p className="text-gray-500 text-sm mt-1">Plan your grocery list. Set your grocery budget in Trip Setup.</p>
+      </div>
 
       {/* Delivery Info */}
       <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
@@ -161,8 +149,8 @@ export default function Groceries() {
           <ShoppingCart size={16} /> Load Starter Template
         </button>
         {items.length > 0 && (
-          <span className="flex items-center gap-1.5 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2 font-medium">
-            ✓ {formatCurrency(total)} synced to Groceries budget
+          <span className="flex items-center gap-1.5 text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2 font-medium">
+            {totalItems} item{totalItems === 1 ? '' : 's'} on the list
           </span>
         )}
       </div>
@@ -173,7 +161,7 @@ export default function Groceries() {
           {allCats.map((cat) => {
             const catItems = items.filter((i) => i.category === cat);
             if (catItems.length === 0) return null;
-            const catTotal = catItems.reduce((sum, i) => sum + i.quantity * i.estimatedUnitPrice, 0);
+            const catCount = catItems.reduce((sum, i) => sum + i.quantity, 0);
             return (
               <div key={cat} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
                 <button
@@ -182,7 +170,7 @@ export default function Groceries() {
                 >
                   <span className="font-semibold text-gray-700 capitalize">{cat.replace('-', ' ')}</span>
                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <span>{formatCurrency(catTotal)}</span>
+                    <span>{catCount}</span>
                     {expandedCats.has(cat) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   </div>
                 </button>
@@ -202,12 +190,6 @@ export default function Groceries() {
                             className="w-6 h-6 flex items-center justify-center bg-gray-100 rounded text-gray-600 hover:bg-gray-200 text-lg leading-none"
                           >+</button>
                         </div>
-                        <span className="text-xs text-gray-400 w-12 text-right">
-                          ${item.estimatedUnitPrice.toFixed(2)} ea
-                        </span>
-                        <span className="text-sm font-medium text-gray-700 w-14 text-right">
-                          {formatCurrency(item.quantity * item.estimatedUnitPrice)}
-                        </span>
                         <button onClick={() => removeGroceryItem(item.id)} className="text-gray-300 hover:text-red-400">
                           <Trash2 size={14} />
                         </button>
@@ -218,11 +200,6 @@ export default function Groceries() {
               </div>
             );
           })}
-
-          <div className="bg-blue-700 text-white rounded-xl p-4 flex items-center justify-between">
-            <span className="font-bold">Estimated Total</span>
-            <span className="text-2xl font-bold">{formatCurrency(total)}</span>
-          </div>
         </div>
       ) : (
         <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
@@ -252,25 +229,14 @@ export default function Groceries() {
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             <option value="other">other</option>
           </select>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              value={newQty}
-              onChange={(e) => setNewQty(e.target.value)}
-              placeholder="Qty"
-              min="1"
-              className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="number"
-              value={newPrice}
-              onChange={(e) => setNewPrice(e.target.value)}
-              placeholder="$ each"
-              min="0"
-              step="0.01"
-              className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <input
+            type="number"
+            value={newQty}
+            onChange={(e) => setNewQty(e.target.value)}
+            placeholder="Qty"
+            min="1"
+            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
         <button
           onClick={handleAddCustom}

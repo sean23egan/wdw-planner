@@ -7,13 +7,7 @@ import { totalActual, totalPlanned, formatCurrency } from '../utils/budget';
 import { parseISO, addDays } from 'date-fns';
 import { format } from 'date-fns';
 import { loadTripSnapshot, saveTripSnapshot } from '../lib/sync';
-
-const PARK_COLORS: Record<string, string> = {
-  'Magic Kingdom': 'bg-purple-100 text-purple-800',
-  'EPCOT': 'bg-blue-100 text-blue-800',
-  'Hollywood Studios': 'bg-red-100 text-red-800',
-  'Animal Kingdom': 'bg-green-100 text-green-800',
-};
+import { parkDayDisplay, travelTagLabel } from '../utils/parkDay';
 
 export default function Dashboard() {
   const trip = useStore((s) => s.trip);
@@ -149,9 +143,14 @@ export default function Dashboard() {
               View <ChevronRight size={14} />
             </Link>
           </div>
-          <span className={`text-xs font-medium px-2 py-1 rounded-full ${PARK_COLORS[todayParkDay.park]}`}>
-            {todayParkDay.park}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-medium px-2 py-1 rounded-full ${parkDayDisplay(todayParkDay).colorClass}`}>
+              {parkDayDisplay(todayParkDay).label}
+            </span>
+            {travelTagLabel(todayParkDay.travelTag) && (
+              <span className="text-xs font-medium px-2 py-1 rounded-full bg-sky-100 text-sky-700">{travelTagLabel(todayParkDay.travelTag)}</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -238,14 +237,15 @@ export default function Dashboard() {
               .map((day) => (
                 <div key={day.id} className="flex items-center gap-3 text-sm">
                   <span className="text-gray-500 w-24 shrink-0">{formatDate(day.date)}</span>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PARK_COLORS[day.park]}`}>
-                    {day.park === 'Hollywood Studios' ? 'HS' :
-                     day.park === 'Magic Kingdom' ? 'MK' :
-                     day.park === 'Animal Kingdom' ? 'AK' : 'EP'}
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${parkDayDisplay(day).colorClass}`}>
+                    {parkDayDisplay(day).abbr}
                   </span>
-                  <span className="text-gray-700 truncate">{day.park}</span>
-                  {day.isHopDay && day.hopToPark && (
+                  <span className="text-gray-700 truncate">{parkDayDisplay(day).label}</span>
+                  {!day.noPark && day.isHopDay && day.hopToPark && (
                     <span className="text-gray-400">→ {day.hopToPark}</span>
+                  )}
+                  {travelTagLabel(day.travelTag) && (
+                    <span className="text-xs text-sky-600">{travelTagLabel(day.travelTag)}</span>
                   )}
                 </div>
               ))}

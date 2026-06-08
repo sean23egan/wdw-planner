@@ -93,6 +93,7 @@ const DEFAULT_BUDGET_CATEGORIES: BudgetCategory[] = [
   { id: 'bc-ll', name: 'Lightning Lane', plannedAmount: 0, actualAmount: 0, paidOff: false, icon: '⚡' },
   { id: 'bc-memory-maker', name: 'Memory Maker', plannedAmount: 0, actualAmount: 0, paidOff: false, icon: '📸' },
   { id: 'bc-events', name: 'Special Events', plannedAmount: 0, actualAmount: 0, paidOff: false, icon: '🎉' },
+  { id: 'bc-golf', name: 'Golfing', plannedAmount: 0, actualAmount: 0, paidOff: false, icon: '⛳' },
   { id: 'bc-misc', name: 'Misc / Snacks', plannedAmount: 0, actualAmount: 0, paidOff: false, icon: '🍦' },
 ];
 

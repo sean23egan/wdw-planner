@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Save, ChevronDown, Mail, UserPlus } from 'lucide-react';
+import { Plus, Trash2, Save, ChevronDown, Mail, UserPlus, X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useAuth } from '../hooks/useAuth';
 import { generateId } from '../utils/ids';
 import { tripDateRange } from '../utils/dates';
 import { sendTripInvite } from '../lib/sync';
-import type { Park, PartyMember, ParkDay, DiningCounts, LLChoice, TransportMode } from '../types';
+import type { Park, PartyMember, ParkDay, DiningCounts, LLChoice, TransportMode, GolfTier } from '../types';
 
 const PARKS: Park[] = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom'];
 
@@ -83,10 +83,23 @@ const DEFAULT_DINING: DiningCounts = {
   charDinners: 0,
 };
 
-// Lightning Lane rates (per person per day, adults + kids only — toddlers don't need LL)
-// Worst-case / peak-season pricing so the budget never comes in short.
-const LL_MULTI_RATE = 39;   // LL Multi Pass — peak holiday top price per person/day
-const LL_SINGLE_RATE = 35;  // LL Single (Individual Lightning Lane) — top-tier attraction per person
+// Lightning Lane worst-case (peak) rates per person/day, by park.
+// Multi = LL Multi Pass for the day; Single = one Individual Lightning Lane attraction.
+const LL_RATES: Record<Park, { multi: number; single: number }> = {
+  'Magic Kingdom':     { multi: 39, single: 32 },
+  'Hollywood Studios': { multi: 39, single: 30 },
+  'EPCOT':             { multi: 30, single: 25 },
+  'Animal Kingdom':    { multi: 30, single: 30 },
+};
+
+// Budget questionnaire rates
+const GROCERY_PER_PERSON_DAY = 13;      // groceries: $/day/person
+const GOLF_TIERS: Record<GolfTier, { label: string; rate: number }> = {
+  twilight: { label: 'Twilight $75', rate: 75 },
+  standard: { label: 'Standard $135', rate: 135 },
+  peak:     { label: 'Peak $175', rate: 175 },
+};
+const MEMORY_MAKER = { passholder: 99, standard: 199 };
 
 // Pricing with tax/tip baked in (matches Budget.tsx DINING_RATES)
 const DINING_RATES = {
@@ -113,13 +126,23 @@ export default function TripSetup() {
   const [startDate, setStartDate] = useState(trip?.startDate ?? '');
   const [endDate, setEndDate] = useState(trip?.endDate ?? '');
   const [resort, setResort] = useState(trip?.resortName ?? '');
-  const [budget, setBudget] = useState(trip?.overallBudget?.toString() ?? '');
   const [notes, setNotes] = useState(trip?.notes ?? '');
   const [partyMembers, setPartyMembers] = useState<PartyMember[]>(trip?.partyMembers ?? []);
   const [memberEmails, setMemberEmails] = useState<Record<string, string>>({});
   const [diningCounts, setDiningCounts] = useState<DiningCounts>(trip?.diningCounts ?? DEFAULT_DINING);
   const [arrivalTransport, setArrivalTransport] = useState<TransportMode>(trip?.arrivalTransport ?? 'none');
   const [departureTransport, setDepartureTransport] = useState<TransportMode>(trip?.departureTransport ?? 'none');
+  // Budget questionnaire state
+  const [wantsGroceries, setWantsGroceries] = useState(trip?.wantsGroceries ?? false);
+  const [wantsMemoryMaker, setWantsMemoryMaker] = useState(trip?.wantsMemoryMaker ?? false);
+  const [anyPassholder, setAnyPassholder] = useState(trip?.anyPassholder ?? false);
+  const [wantsSpecialEvents, setWantsSpecialEvents] = useState((trip?.specialEventsBudget ?? 0) > 0);
+  const [specialEventsBudget, setSpecialEventsBudget] = useState((trip?.specialEventsBudget ?? 0).toString());
+  const [wantsGolf, setWantsGolf] = useState((trip?.golfRounds?.length ?? 0) > 0);
+  const [golfers, setGolfers] = useState((trip?.golfers ?? 1).toString());
+  const [golfRounds, setGolfRounds] = useState<GolfTier[]>(trip?.golfRounds ?? []);
+  const [snackBudget, setSnackBudget] = useState((trip?.snackBudget ?? 0).toString());
+  const [souvenirBudget, setSouvenirBudget] = useState((trip?.souvenirBudget ?? 0).toString());
   const [saved, setSaved] = useState(false);
   const [localParkDays, setLocalParkDays] = useState<ParkDay[]>([]);
   const [shareEmail, setShareEmail] = useState('');
@@ -192,80 +215,104 @@ export default function TripSetup() {
     );
   };
 
-  // LL estimate: adults + kids count (toddlers skip LL), sum by park day choice
+  // LL estimate: adults + kids (toddlers skip LL), priced per park, skipping no-park days
   const computeLLEstimate = (members: PartyMember[], days: ParkDay[]) => {
     const pax = members.filter((m) => m.role === 'adult' || m.role === 'kid').length;
     if (pax === 0) return 0;
     return days.reduce((sum, day) => {
+      if (day.noPark) return sum;
       const choice = day.llChoice ?? 'none';
-      if (choice === 'multi') return sum + pax * LL_MULTI_RATE;
-      if (choice === 'single') return sum + pax * LL_SINGLE_RATE;
-      if (choice === 'both') return sum + pax * (LL_MULTI_RATE + LL_SINGLE_RATE);
+      const rate = LL_RATES[day.park] ?? LL_RATES['Magic Kingdom'];
+      if (choice === 'multi') return sum + pax * rate.multi;
+      if (choice === 'single') return sum + pax * rate.single;
+      if (choice === 'both') return sum + pax * (rate.multi + rate.single);
       return sum;
     }, 0);
   };
+
+  // Budget questionnaire estimates
+  const tripDays = startDate && endDate && startDate <= endDate ? tripDateRange(startDate, endDate).length : 0;
+  const groceryEstimate = wantsGroceries ? GROCERY_PER_PERSON_DAY * tripDays * Math.max(1, partyMembers.length) : 0;
+  const memoryMakerEstimate = wantsMemoryMaker ? (anyPassholder ? MEMORY_MAKER.passholder : MEMORY_MAKER.standard) : 0;
+  const golfEstimate = wantsGolf
+    ? Math.max(1, parseInt(golfers) || 0) * golfRounds.reduce((s, t) => s + GOLF_TIERS[t].rate, 0)
+    : 0;
+  const specialEventsEstimate = wantsSpecialEvents ? Math.max(0, parseFloat(specialEventsBudget) || 0) : 0;
+  const snackEstimate = Math.max(0, parseFloat(snackBudget) || 0);
+  const souvenirEstimate = Math.max(0, parseFloat(souvenirBudget) || 0);
 
   const handleSave = async () => {
     if (!name || !startDate || !endDate) return;
 
     const tripId = trip?.id ?? generateId();
+    const round = (n: number) => Math.round(n);
+    const diningEst = computeDiningEstimate(partyMembers, diningCounts);
+    const llEst = computeLLEstimate(partyMembers, localParkDays);
+
+    // Each questionnaire-driven category: canonical id, display, amount, and whether to
+    // overwrite even when the amount is 0 (toggle categories own their value outright).
+    const catUpdates: { id: string; name: string; icon: string; amount: number; writeZero: boolean; match: (c: { id: string; name: string }) => boolean }[] = [
+      { id: 'bc-transport', name: 'Transportation', icon: '✈️', amount: round(transportEstimate), writeZero: false, match: (c) => c.id === 'bc-transport' || c.name.toLowerCase().includes('transport') },
+      { id: 'bc-dining', name: 'Dining', icon: '🍽️', amount: round(diningEst), writeZero: false, match: (c) => c.id === 'bc-dining' || c.name.toLowerCase().includes('dining') || c.name.toLowerCase().includes('food') },
+      { id: 'bc-ll', name: 'Lightning Lane', icon: '⚡', amount: round(llEst), writeZero: false, match: (c) => c.id === 'bc-ll' || c.name.toLowerCase().includes('lightning') },
+      { id: 'bc-groceries', name: 'Groceries', icon: '🛒', amount: round(groceryEstimate), writeZero: true, match: (c) => c.id === 'bc-groceries' || c.name.toLowerCase().includes('grocery') },
+      { id: 'bc-memory-maker', name: 'Memory Maker', icon: '📸', amount: round(memoryMakerEstimate), writeZero: true, match: (c) => c.id === 'bc-memory-maker' || c.name.toLowerCase().includes('memory') },
+      { id: 'bc-events', name: 'Special Events', icon: '🎉', amount: round(specialEventsEstimate), writeZero: true, match: (c) => c.id === 'bc-events' || c.name.toLowerCase().includes('event') },
+      { id: 'bc-golf', name: 'Golfing', icon: '⛳', amount: round(golfEstimate), writeZero: true, match: (c) => c.id === 'bc-golf' || c.name.toLowerCase().includes('golf') },
+      { id: 'bc-misc', name: 'Misc / Snacks', icon: '🍦', amount: round(snackEstimate), writeZero: true, match: (c) => c.id === 'bc-misc' || c.name.toLowerCase().includes('snack') || c.name.toLowerCase().includes('misc') },
+      { id: 'bc-gifts', name: 'Gifts/Souvenirs', icon: '🛍️', amount: round(souvenirEstimate), writeZero: true, match: (c) => c.id === 'bc-gifts' || c.name.toLowerCase().includes('souvenir') || c.name.toLowerCase().includes('gift') },
+    ];
+
+    const store = useStore.getState();
+    const finalById: Record<string, number> = {};
+    budgetCategories.forEach((c) => { finalById[c.id] = c.plannedAmount; });
+
+    catUpdates.forEach((u) => {
+      const existing = budgetCategories.find(u.match);
+      const shouldWrite = u.amount > 0 || u.writeZero;
+      if (existing) {
+        if (shouldWrite) {
+          updateBudgetCategory(existing.id, { plannedAmount: u.amount });
+          finalById[existing.id] = u.amount;
+        }
+      } else if (u.amount > 0) {
+        store.addBudgetCategory({ id: u.id, name: u.name, plannedAmount: u.amount, actualAmount: 0, paidOff: false, icon: u.icon });
+        finalById[u.id] = u.amount;
+      }
+    });
+
+    // Overall budget = live sum of every category's planned amount
+    const overallBudget = Object.values(finalById).reduce((a, b) => a + b, 0);
+
     setTrip({
       id: tripId,
       name,
       startDate,
       endDate,
       partyMembers,
-      overallBudget: parseFloat(budget) || 0,
+      overallBudget,
       resortName: resort,
       notes,
       giftCardBalance: trip?.giftCardBalance,
+      savedCash: trip?.savedCash,
       diningCounts,
       arrivalTransport,
       departureTransport,
+      wantsGroceries,
+      wantsMemoryMaker,
+      anyPassholder,
+      specialEventsBudget: specialEventsEstimate,
+      golfers: Math.max(1, parseInt(golfers) || 0),
+      golfRounds,
+      snackBudget: snackEstimate,
+      souvenirBudget: souvenirEstimate,
     });
-
-    // Auto-update Transportation budget category (arrival + departure legs)
-    if (transportEstimate > 0) {
-      const transCat = budgetCategories.find(
-        (c) => c.name.toLowerCase().includes('transport') || c.id === 'bc-transport'
-      );
-      if (transCat) {
-        updateBudgetCategory(transCat.id, { plannedAmount: Math.round(transportEstimate) });
-      } else {
-        useStore.getState().addBudgetCategory({ id: 'bc-transport', name: 'Transportation', plannedAmount: Math.round(transportEstimate), actualAmount: 0, paidOff: false, icon: '✈️' });
-      }
-    }
-
-    // Auto-update Dining budget category
-    const diningEst = computeDiningEstimate(partyMembers, diningCounts);
-    if (diningEst > 0) {
-      const diningCat = budgetCategories.find(
-        (c) => c.name.toLowerCase().includes('dining') || c.name.toLowerCase().includes('food')
-      );
-      if (diningCat) {
-        updateBudgetCategory(diningCat.id, { plannedAmount: Math.round(diningEst) });
-      }
-    }
-
-    // Auto-update Lightning Lane budget category (create if missing)
-    const llEst = computeLLEstimate(partyMembers, localParkDays);
-    if (llEst > 0) {
-      const llCat = budgetCategories.find(
-        (c) => c.name.toLowerCase().includes('lightning') || c.id === 'bc-ll'
-      );
-      if (llCat) {
-        updateBudgetCategory(llCat.id, { plannedAmount: Math.round(llEst) });
-      } else {
-        // Category was deleted — recreate it
-        useStore.getState().addBudgetCategory({ id: 'bc-ll', name: 'Lightning Lane', plannedAmount: Math.round(llEst), actualAmount: 0, paidOff: false, icon: '⚡' });
-      }
-    }
 
     // Sync park days
     const existingIds = parkDays.map((d) => d.id);
     localParkDays.forEach((day) => {
       if (existingIds.includes(day.id)) {
-        updateParkDay(day.id, { park: day.park, isHopDay: day.isHopDay, hopToPark: day.hopToPark, hopTime: day.hopTime, llChoice: day.llChoice });
+        updateParkDay(day.id, { park: day.park, isHopDay: day.isHopDay, hopToPark: day.hopToPark, hopTime: day.hopTime, llChoice: day.llChoice, noPark: day.noPark, travelTag: day.travelTag });
       } else {
         addParkDay({ ...day, tripId });
       }
@@ -295,6 +342,18 @@ export default function TripSetup() {
   const transportPax = Math.max(1, partyMembers.length);
   const transportEstimate =
     transportLegCost(arrivalTransport, transportPax) + transportLegCost(departureTransport, transportPax);
+
+  // Live overall-budget preview: questionnaire estimates + any non-questionnaire
+  // categories already set elsewhere (Tickets, Lodging, custom).
+  const QUESTIONNAIRE_IDS = new Set(['bc-transport', 'bc-dining', 'bc-ll', 'bc-groceries', 'bc-memory-maker', 'bc-events', 'bc-golf', 'bc-misc', 'bc-gifts']);
+  const otherCategoriesTotal = budgetCategories
+    .filter((c) => !QUESTIONNAIRE_IDS.has(c.id))
+    .reduce((s, c) => s + c.plannedAmount, 0);
+  const overallBudgetPreview = Math.round(
+    otherCategoriesTotal + transportEstimate + diningEstimate + llEstimate +
+    groceryEstimate + memoryMakerEstimate + specialEventsEstimate + golfEstimate +
+    snackEstimate + souvenirEstimate
+  );
 
   return (
     <div className="space-y-6">
@@ -364,18 +423,6 @@ export default function TripSetup() {
             </select>
             <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Overall Budget ($)</label>
-          <input
-            type="number"
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
-            placeholder="5000"
-            min="0"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
         </div>
 
         <div>
@@ -628,38 +675,59 @@ export default function TripSetup() {
           <div className="space-y-3">
             {localParkDays.map((day, idx) => (
               <div key={day.id} className="border border-gray-100 rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-gray-600 w-28 shrink-0">
                     {new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                   </span>
                   <select
-                    value={day.park}
+                    value={day.noPark ? '__none__' : day.park}
                     onChange={(e) => {
+                      const v = e.target.value;
                       const updated = [...localParkDays];
-                      updated[idx] = { ...day, park: e.target.value as Park };
+                      updated[idx] = v === '__none__'
+                        ? { ...day, noPark: true, isHopDay: false }
+                        : { ...day, noPark: false, park: v as Park };
                       setLocalParkDays(updated);
                     }}
-                    className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 min-w-32 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {PARKS.map((p) => (
                       <option key={p} value={p}>{p}</option>
                     ))}
+                    <option value="__none__">No Park / Rest Day</option>
                   </select>
-                  <label className="flex items-center gap-1 text-sm text-gray-600 shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={day.isHopDay}
-                      onChange={(e) => {
-                        const updated = [...localParkDays];
-                        updated[idx] = { ...day, isHopDay: e.target.checked };
-                        setLocalParkDays(updated);
-                      }}
-                      className="rounded"
-                    />
-                    Hop
-                  </label>
+                  <select
+                    value={day.travelTag ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const updated = [...localParkDays];
+                      updated[idx] = { ...day, travelTag: v === '' ? undefined : (v as 'arrival' | 'departure') };
+                      setLocalParkDays(updated);
+                    }}
+                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    title="Tag this as a travel day"
+                  >
+                    <option value="">— Tag —</option>
+                    <option value="arrival">✈️ Arrival</option>
+                    <option value="departure">✈️ Departure</option>
+                  </select>
+                  {!day.noPark && (
+                    <label className="flex items-center gap-1 text-sm text-gray-600 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={day.isHopDay}
+                        onChange={(e) => {
+                          const updated = [...localParkDays];
+                          updated[idx] = { ...day, isHopDay: e.target.checked };
+                          setLocalParkDays(updated);
+                        }}
+                        className="rounded"
+                      />
+                      Hop
+                    </label>
+                  )}
                 </div>
-                {day.isHopDay && (
+                {!day.noPark && day.isHopDay && (
                   <div className="flex gap-2 items-center pl-28">
                     <span className="text-xs text-gray-500">Hop to:</span>
                     <select
@@ -688,32 +756,35 @@ export default function TripSetup() {
                     />
                   </div>
                 )}
-                {/* Lightning Lane choice */}
-                <div className="flex items-center gap-1.5 pt-1">
-                  <span className="text-xs text-gray-500 w-28 shrink-0">Lightning Lane:</span>
-                  <div className="flex gap-1">
-                    {(['none', 'multi', 'single', 'both'] as LLChoice[]).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          const updated = [...localParkDays];
-                          updated[idx] = { ...day, llChoice: opt };
-                          setLocalParkDays(updated);
-                        }}
-                        className={`text-xs px-2 py-1 rounded-lg font-medium border transition-colors ${
-                          (day.llChoice ?? 'none') === opt
-                            ? opt === 'none'
-                              ? 'bg-gray-200 text-gray-700 border-gray-300'
-                              : 'bg-blue-700 text-white border-blue-700'
-                            : 'bg-white text-gray-500 border-gray-200 hover:border-blue-400'
-                        }`}
-                      >
-                        {opt === 'none' ? 'None' : opt === 'multi' ? 'LL Multi' : opt === 'single' ? 'LL Single' : 'Both'}
-                      </button>
-                    ))}
+                {day.noPark ? (
+                  <p className="text-xs text-gray-400 pl-28">Rest / non-park day — no tickets or Lightning Lane needed.</p>
+                ) : (
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <span className="text-xs text-gray-500 w-28 shrink-0">Lightning Lane:</span>
+                    <div className="flex gap-1">
+                      {(['none', 'multi', 'single', 'both'] as LLChoice[]).map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => {
+                            const updated = [...localParkDays];
+                            updated[idx] = { ...day, llChoice: opt };
+                            setLocalParkDays(updated);
+                          }}
+                          className={`text-xs px-2 py-1 rounded-lg font-medium border transition-colors ${
+                            (day.llChoice ?? 'none') === opt
+                              ? opt === 'none'
+                                ? 'bg-gray-200 text-gray-700 border-gray-300'
+                                : 'bg-blue-700 text-white border-blue-700'
+                              : 'bg-white text-gray-500 border-gray-200 hover:border-blue-400'
+                          }`}
+                        >
+                          {opt === 'none' ? 'None' : opt === 'multi' ? 'LL Multi' : opt === 'single' ? 'LL Single' : 'Both'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>
@@ -721,7 +792,7 @@ export default function TripSetup() {
             <div className="mt-3 flex items-center justify-between rounded-lg bg-purple-50 border border-purple-100 px-4 py-3">
               <div>
                 <span className="text-sm font-medium text-purple-800">Estimated Lightning Lane Total</span>
-                <p className="text-xs text-purple-500 mt-0.5">Worst-case: LL Multi ~$39/person/day · LL Single ~$35/person/attraction</p>
+                <p className="text-xs text-purple-500 mt-0.5">Worst-case, priced per park (MK/HS up to ~$39 Multi · EPCOT/AK ~$30)</p>
               </div>
               <span className="text-lg font-bold text-purple-900">
                 ${llEstimate.toLocaleString('en-US', { maximumFractionDigits: 0 })}
@@ -730,6 +801,137 @@ export default function TripSetup() {
           )}
         </div>
       )}
+
+      {/* Budget questions */}
+      <div className="bg-white rounded-xl shadow-sm p-4 space-y-4">
+        <div>
+          <h2 className="font-bold text-gray-700">Budget Questions</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Answer these and we'll fill each budget category for you. Your overall budget is the sum below.</p>
+        </div>
+
+        {/* Groceries */}
+        <div className="border-b border-gray-100 pb-3">
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm font-medium text-gray-700">🛒 Buying groceries / delivery?</span>
+            <input type="checkbox" checked={wantsGroceries} onChange={(e) => setWantsGroceries(e.target.checked)} className="rounded w-4 h-4 accent-blue-700" />
+          </label>
+          {wantsGroceries && (
+            <p className="text-xs text-gray-500 mt-1">${GROCERY_PER_PERSON_DAY}/person/day × {tripDays} day{tripDays === 1 ? '' : 's'} × {Math.max(1, partyMembers.length)} = <strong>${groceryEstimate.toLocaleString('en-US')}</strong></p>
+          )}
+        </div>
+
+        {/* Memory Maker */}
+        <div className="border-b border-gray-100 pb-3">
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm font-medium text-gray-700">📸 Memory Maker (PhotoPass)?</span>
+            <input type="checkbox" checked={wantsMemoryMaker} onChange={(e) => setWantsMemoryMaker(e.target.checked)} className="rounded w-4 h-4 accent-blue-700" />
+          </label>
+          {wantsMemoryMaker && (
+            <div className="mt-2 space-y-1">
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input type="checkbox" checked={anyPassholder} onChange={(e) => setAnyPassholder(e.target.checked)} className="rounded accent-blue-700" />
+                Anyone in the group an annual passholder?
+              </label>
+              <p className="text-xs text-gray-500">{anyPassholder ? 'Passholder rate' : 'Standard rate'}: <strong>${memoryMakerEstimate}</strong> (one purchase, whole party)</p>
+            </div>
+          )}
+        </div>
+
+        {/* Special events */}
+        <div className="border-b border-gray-100 pb-3">
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm font-medium text-gray-700">🎉 Special events / tours / parties?</span>
+            <input type="checkbox" checked={wantsSpecialEvents} onChange={(e) => setWantsSpecialEvents(e.target.checked)} className="rounded w-4 h-4 accent-blue-700" />
+          </label>
+          {wantsSpecialEvents && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-sm text-gray-500">Budget $</span>
+              <input
+                type="number" min="0" value={specialEventsBudget}
+                onChange={(e) => setSpecialEventsBudget(e.target.value)}
+                placeholder="0"
+                className="w-32 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Golfing */}
+        <div className="border-b border-gray-100 pb-3">
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm font-medium text-gray-700">⛳ Golfing?</span>
+            <input type="checkbox" checked={wantsGolf} onChange={(e) => { setWantsGolf(e.target.checked); if (e.target.checked && golfRounds.length === 0) setGolfRounds(['standard']); }} className="rounded w-4 h-4 accent-blue-700" />
+          </label>
+          {wantsGolf && (
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500"># Golfers</span>
+                <input
+                  type="number" min="1" value={golfers}
+                  onChange={(e) => setGolfers(e.target.value)}
+                  className="w-20 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1.5">
+                {golfRounds.map((tier, ri) => (
+                  <div key={ri} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 w-16">Round {ri + 1}</span>
+                    <select
+                      value={tier}
+                      onChange={(e) => {
+                        const next = [...golfRounds]; next[ri] = e.target.value as GolfTier; setGolfRounds(next);
+                      }}
+                      className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {(Object.keys(GOLF_TIERS) as GolfTier[]).map((t) => (
+                        <option key={t} value={t}>{GOLF_TIERS[t].label}</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => setGolfRounds(golfRounds.filter((_, i) => i !== ri))} className="text-gray-300 hover:text-red-400">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setGolfRounds([...golfRounds, 'standard'])} className="flex items-center gap-1 text-xs text-blue-700 font-medium hover:text-blue-800">
+                  <Plus size={12} /> Add round
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">{Math.max(1, parseInt(golfers) || 0)} golfer(s) × {golfRounds.length} round(s) = <strong>${golfEstimate.toLocaleString('en-US')}</strong></p>
+            </div>
+          )}
+        </div>
+
+        {/* Snacks + souvenirs */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">🍦 Snack budget $</label>
+            <input
+              type="number" min="0" value={snackBudget}
+              onChange={(e) => setSnackBudget(e.target.value)}
+              placeholder="0"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">🛍️ Souvenir budget $</label>
+            <input
+              type="number" min="0" value={souvenirBudget}
+              onChange={(e) => setSouvenirBudget(e.target.value)}
+              placeholder="0"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Overall budget preview */}
+      <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-xl p-5 text-white shadow-sm flex items-center justify-between">
+        <div>
+          <p className="text-blue-200 text-sm">Estimated trip budget</p>
+          <p className="text-xs text-blue-300 mt-0.5">Sum of all budget categories</p>
+        </div>
+        <span className="text-3xl font-bold">${overallBudgetPreview.toLocaleString('en-US')}</span>
+      </div>
 
       <button
         onClick={handleSave}

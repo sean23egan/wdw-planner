@@ -21,21 +21,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { useStore } from '../store/useStore';
 import { formatDate, isToday } from '../utils/dates';
 import { generateId } from '../utils/ids';
+import { parkDayDisplay, travelTagLabel } from '../utils/parkDay';
 import type { ItineraryItem, ItemType, ParkDay } from '../types';
-
-const PARK_ABBR: Record<string, string> = {
-  'Magic Kingdom': 'MK',
-  'EPCOT': 'EP',
-  'Hollywood Studios': 'HS',
-  'Animal Kingdom': 'AK',
-};
-
-const PARK_COLORS: Record<string, string> = {
-  'Magic Kingdom': 'bg-purple-100 text-purple-800',
-  'EPCOT': 'bg-blue-100 text-blue-800',
-  'Hollywood Studios': 'bg-red-100 text-red-800',
-  'Animal Kingdom': 'bg-green-100 text-green-800',
-};
 
 const TYPE_COLORS: Record<ItemType, string> = {
   attraction: 'bg-blue-100 text-blue-700',
@@ -193,7 +180,7 @@ export default function Itinerary() {
             >
               <div>{formatDate(day.date)}</div>
               <div className={`text-xs ${active ? 'text-blue-200' : 'text-gray-400'}`}>
-                {PARK_ABBR[day.park] ?? day.park}
+                {parkDayDisplay(day).abbr}
                 {isToday(day.date) && ' · Today'}
               </div>
             </button>
@@ -205,16 +192,21 @@ export default function Itinerary() {
       <div className="bg-white rounded-xl shadow-sm p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-bold text-gray-800">{selectedDay.park}</h2>
+            <h2 className="font-bold text-gray-800 flex items-center gap-2">
+              {parkDayDisplay(selectedDay).label}
+              {travelTagLabel(selectedDay.travelTag) && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">{travelTagLabel(selectedDay.travelTag)}</span>
+              )}
+            </h2>
             <p className="text-sm text-gray-500">{formatDate(selectedDay.date)}</p>
-            {selectedDay.isHopDay && selectedDay.hopToPark && (
+            {!selectedDay.noPark && selectedDay.isHopDay && selectedDay.hopToPark && (
               <p className="text-xs text-blue-600 mt-0.5">
                 Hopping to {selectedDay.hopToPark}{selectedDay.hopTime ? ` at ${selectedDay.hopTime}` : ''}
               </p>
             )}
           </div>
-          <span className={`text-xs font-medium px-2 py-1 rounded-full ${PARK_COLORS[selectedDay.park]}`}>
-            {PARK_ABBR[selectedDay.park]}
+          <span className={`text-xs font-medium px-2 py-1 rounded-full ${parkDayDisplay(selectedDay).colorClass}`}>
+            {parkDayDisplay(selectedDay).abbr}
           </span>
         </div>
       </div>

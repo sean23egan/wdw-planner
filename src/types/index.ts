@@ -46,6 +46,7 @@ export interface DiningCounts {
 }
 
 export type TransportMode = 'none' | 'rideshare' | 'mears' | 'private';
+export type GolfTier = 'twilight' | 'standard' | 'peak';
 
 export interface Trip {
   id: string;
@@ -61,6 +62,15 @@ export interface Trip {
   diningCounts?: DiningCounts;
   arrivalTransport?: TransportMode;
   departureTransport?: TransportMode;
+  // Budget questionnaire answers
+  wantsGroceries?: boolean;
+  wantsMemoryMaker?: boolean;
+  anyPassholder?: boolean;
+  specialEventsBudget?: number;
+  golfers?: number;
+  golfRounds?: GolfTier[];
+  snackBudget?: number;
+  souvenirBudget?: number;
 }
 
 export type LLChoice = 'none' | 'multi' | 'single' | 'both';
@@ -75,6 +85,8 @@ export interface ParkDay {
   hopTime?: string;
   notes?: string;
   llChoice?: LLChoice;
+  noPark?: boolean;                    // rest/resort day — park field ignored
+  travelTag?: 'arrival' | 'departure'; // orthogonal tag, combines with park or noPark
 }
 
 export interface ItineraryItem {

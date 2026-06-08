@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { useStore, isDefaultBudgetCategory } from '../store/useStore';
 import { generateId } from '../utils/ids';
+import { parkDayDisplay, travelTagLabel } from '../utils/parkDay';
 import { totalPlanned, formatCurrency } from '../utils/budget';
 import { formatDate, tripDateRange } from '../utils/dates';
 
@@ -97,7 +98,7 @@ export default function Budget() {
     const dayExp = expenses.filter((e) => e.date === date);
     const dayTotal = dayExp.reduce((sum, e) => sum + e.amount, 0);
     const parkDay = parkDays.find((d) => d.date === date);
-    return { date, park: parkDay?.park, expenses: dayExp, total: dayTotal };
+    return { date, parkDay, expenses: dayExp, total: dayTotal };
   });
 
   return (
@@ -432,12 +433,17 @@ export default function Budget() {
                 </div>
               )}
 
-              {expensesByDay.map(({ date, park, expenses: dayExps, total }) => (
+              {expensesByDay.map(({ date, parkDay, expenses: dayExps, total }) => (
                 <div key={date} className="bg-white rounded-xl shadow-sm p-4">
                   <div className="flex items-center justify-between mb-2">
                     <div>
                       <div className="font-semibold text-gray-800 text-sm">{formatDate(date)}</div>
-                      {park && <div className="text-xs text-gray-500">{park}</div>}
+                      {parkDay && (
+                        <div className="text-xs text-gray-500">
+                          {parkDayDisplay(parkDay).label}
+                          {travelTagLabel(parkDay.travelTag) && ` · ${travelTagLabel(parkDay.travelTag)}`}
+                        </div>
+                      )}
                     </div>
                     <div className={`font-bold ${total > 0 ? 'text-gray-800' : 'text-gray-300'}`}>
                       {formatCurrency(total)}
