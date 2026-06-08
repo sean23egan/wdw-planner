@@ -34,6 +34,7 @@ export default function SpecialEvents() {
   const [itinEvent, setItinEvent] = useState<SpecialEvent | null>(null);
   const [itinDayId, setItinDayId] = useState('');
   const [itinTime, setItinTime] = useState('');
+  const [itinAttendees, setItinAttendees] = useState(1);
   // When true, confirming will also call addSpecialEvent (item not yet in My Events)
   const [itinIsNew, setItinIsNew] = useState(false);
 
@@ -43,6 +44,8 @@ export default function SpecialEvents() {
     return event.dates.some((d) => d >= trip.startDate && d <= trip.endDate);
   };
 
+  const defaultAttendees = () => trip?.partyMembers?.length ?? 1;
+
   // Open modal for a catalog item — if no park days, just add to My Events directly
   const openAddModal = (event: SpecialEvent & { id: string }) => {
     if (parkDays.length === 0) {
@@ -51,7 +54,7 @@ export default function SpecialEvents() {
       setAddedIds((prev) => new Set([...prev, event.id]));
       if (event.ticketCost) {
         const cat = budgetCategories.find((c) => c.id === 'bc-events' || c.name.toLowerCase().includes('event'));
-        if (cat) updateBudgetCategory(cat.id, { plannedAmount: cat.plannedAmount + event.ticketCost });
+        if (cat) updateBudgetCategory(cat.id, { plannedAmount: cat.plannedAmount + event.ticketCost * defaultAttendees() });
       }
       return;
     }
@@ -59,6 +62,7 @@ export default function SpecialEvents() {
     setItinEvent(event);
     setItinDayId(matchingDay?.id ?? '');
     setItinTime('');
+    setItinAttendees(defaultAttendees());
     setItinIsNew(true);
   };
 
@@ -68,6 +72,7 @@ export default function SpecialEvents() {
     setItinEvent(event);
     setItinDayId(matchingDay?.id ?? '');
     setItinTime('');
+    setItinAttendees(defaultAttendees());
     setItinIsNew(false);
   };
 
@@ -78,8 +83,9 @@ export default function SpecialEvents() {
       addSpecialEvent({ id: generateId(), name: itinEvent.name, type: itinEvent.type, dates: itinEvent.dates, affectedPark: itinEvent.affectedPark, ticketCost: itinEvent.ticketCost, notes: itinEvent.notes, festivalBoothNotes: itinEvent.festivalBoothNotes });
       setAddedIds((prev) => new Set([...prev, itinEvent.id]));
       if (itinEvent.ticketCost) {
+        const cost = itinEvent.ticketCost * itinAttendees;
         const cat = budgetCategories.find((c) => c.id === 'bc-events' || c.name.toLowerCase().includes('event'));
-        if (cat) updateBudgetCategory(cat.id, { plannedAmount: cat.plannedAmount + itinEvent.ticketCost });
+        if (cat) updateBudgetCategory(cat.id, { plannedAmount: cat.plannedAmount + cost });
       }
     }
     // Add to itinerary
@@ -265,6 +271,22 @@ export default function SpecialEvents() {
               </button>
             </div>
             <p className="text-sm font-semibold text-gray-800">{itinEvent.name}</p>
+            {itinEvent.ticketCost && (
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">
+                  # Attending {itinAttendees > 0 && `— ${formatCurrency(itinEvent.ticketCost * itinAttendees)} total`}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={itinAttendees}
+                  onChange={(e) => setItinAttendees(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(itinEvent.ticketCost)}/person — added to Special Events budget</p>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">Park Day *</label>
               <select

@@ -47,6 +47,15 @@ const TYPE_COLORS: Record<ItemType, string> = {
 
 const OTHER_TYPES: ItemType[] = ['show', 'break', 'event'];
 
+/** Convert "HH:MM" (24h) to "h:MM AM/PM" */
+function fmt12(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return time;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hr = h % 12 || 12;
+  return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
 interface SortableItemProps {
   item: ItineraryItem;
   onRemove: (id: string) => void;
@@ -73,8 +82,8 @@ function SortableItem({ item, onRemove }: SortableItemProps) {
         <GripVertical size={16} />
       </button>
       {item.time && (
-        <span className="text-xs text-gray-500 w-12 shrink-0 flex items-center gap-1">
-          <Clock size={10} />{item.time}
+        <span className="text-xs text-gray-500 w-16 shrink-0 flex items-center gap-1">
+          <Clock size={10} />{fmt12(item.time)}
         </span>
       )}
       <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${TYPE_COLORS[item.type]}`}>

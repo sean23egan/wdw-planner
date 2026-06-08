@@ -70,6 +70,7 @@ interface AppState {
   togglePreTripTask: (id: string) => void;
 
   initializeDefaultData: () => void;
+  restoreMissingBudgetCategories: () => void;
 
   // Multi-trip management
   getSnapshot: () => TripSnapshot;
@@ -101,11 +102,10 @@ const DEFAULT_PRE_TRIP_TASKS: PreTripTask[] = [
   { id: 'pt-link-tickets', name: 'Link tickets in My Disney Experience', done: false, category: 'Tickets' },
   { id: 'pt-park-pass', name: 'Set up park pass reservations', done: false, category: 'Planning' },
   { id: 'pt-adr', name: 'Book Advance Dining Reservations (ADR)', daysBeforeTrip: 60, done: false, category: 'Dining' },
-  { id: 'pt-ills', name: 'Purchase Lightning Lane Individual Selections (if applicable)', daysBeforeTrip: 60, done: false, category: 'Planning' },
+  { id: 'pt-ll', name: 'Book Lightning Lane (Multi Pass & Individual Selections)', daysBeforeTrip: 7, done: false, category: 'Planning' },
   { id: 'pt-resort-checkin', name: 'Mobile check-in for resort', daysBeforeTrip: 10, done: false, category: 'Lodging' },
   { id: 'pt-grocery-order', name: 'Order Walmart grocery delivery', daysBeforeTrip: 7, done: false, category: 'Groceries' },
   { id: 'pt-offline-maps', name: 'Download offline park maps', daysBeforeTrip: 7, done: false, category: 'Planning' },
-  { id: 'pt-genie-plus', name: 'Book Genie+ / Lightning Lane (day of, 7am)', done: false, category: 'Planning' },
 ];
 
 const DEFAULT_PACKING_ITEMS: PackingItem[] = [
@@ -292,6 +292,19 @@ export const useStore = create<AppState>()(
       },
 
       loadSnapshot: (snapshot: TripSnapshot) => {
+        // Migrate old separate LL tasks → combined pt-ll task
+        let tasks = (snapshot.preTripTasks ?? []).filter(
+          (t) => t.id !== 'pt-ills' && t.id !== 'pt-genie-plus' &&
+                 !t.name.toLowerCase().includes('genie+') &&
+                 !(t.name.toLowerCase().includes('individual') && t.name.toLowerCase().includes('selection'))
+        );
+        const hasLLTask = tasks.some((t) => t.id === 'pt-ll' || t.name.toLowerCase().includes('lightning lane'));
+        if (!hasLLTask) {
+          tasks = [...tasks, { id: 'pt-ll', name: 'Book Lightning Lane (Multi Pass & Individual Selections)', daysBeforeTrip: 7, done: false, category: 'Planning' }];
+        } else {
+          // Update existing pt-ll task to have daysBeforeTrip: 7 if missing
+          tasks = tasks.map((t) => t.id === 'pt-ll' ? { ...t, daysBeforeTrip: t.daysBeforeTrip ?? 7, name: 'Book Lightning Lane (Multi Pass & Individual Selections)' } : t);
+        }
         set({
           trip: snapshot.trip,
           parkDays: snapshot.parkDays ?? [],
@@ -305,7 +318,7 @@ export const useStore = create<AppState>()(
           ticketOptions: snapshot.ticketOptions ?? [],
           specialEvents: snapshot.specialEvents ?? [],
           packingItems: snapshot.packingItems ?? [],
-          preTripTasks: snapshot.preTripTasks ?? [],
+          preTripTasks: tasks,
         });
       },
 
@@ -387,6 +400,17 @@ export const useStore = create<AppState>()(
         packingItems: [],
         preTripTasks: [],
       }),
+
+      restoreMissingBudgetCategories: () => {
+        const state = get();
+        const existing = state.budgetCategories;
+        const toAdd = DEFAULT_BUDGET_CATEGORIES.filter(
+          (def) => !existing.some((e) => e.id === def.id || e.name.toLowerCase() === def.name.toLowerCase())
+        );
+        if (toAdd.length > 0) {
+          set({ budgetCategories: [...existing, ...toAdd] });
+        }
+      },
 
       initializeDefaultData: () => {
         const state = get();

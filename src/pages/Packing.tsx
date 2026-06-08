@@ -226,6 +226,11 @@ export default function Packing() {
                           <span className={`text-sm ${task.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                             {task.name}
                           </span>
+                          {task.name.toLowerCase().includes('lightning lane') && !task.done && (
+                            <div className="text-xs mt-0.5 text-blue-600 font-medium">
+                              ⏰ Book at 7pm ET — 7 days before your arrival
+                            </div>
+                          )}
                           {task.computedDue && (
                             <div className="text-xs mt-0.5 text-gray-500">
                               Due: {task.computedDue}

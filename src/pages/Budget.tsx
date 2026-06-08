@@ -44,6 +44,7 @@ export default function Budget() {
   const addBudgetCategory = useStore((s) => s.addBudgetCategory);
   const updateBudgetCategory = useStore((s) => s.updateBudgetCategory);
   const removeBudgetCategory = useStore((s) => s.removeBudgetCategory);
+  const restoreMissingBudgetCategories = useStore((s) => s.restoreMissingBudgetCategories);
   const addExpense = useStore((s) => s.addExpense);
   const removeExpense = useStore((s) => s.removeExpense);
 
@@ -498,12 +499,21 @@ export default function Budget() {
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => setShowAddCat(true)}
-              className="w-full border-2 border-dashed border-gray-200 rounded-xl py-3 text-sm text-gray-400 hover:border-blue-300 hover:text-blue-500 flex items-center justify-center gap-2"
-            >
-              <Plus size={16} /> Add Category
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowAddCat(true)}
+                className="flex-1 border-2 border-dashed border-gray-200 rounded-xl py-3 text-sm text-gray-400 hover:border-blue-300 hover:text-blue-500 flex items-center justify-center gap-2"
+              >
+                <Plus size={16} /> Add Category
+              </button>
+              <button
+                onClick={() => restoreMissingBudgetCategories()}
+                className="border-2 border-dashed border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-400 hover:border-green-300 hover:text-green-600 flex items-center gap-1 whitespace-nowrap"
+                title="Add back any default categories you removed"
+              >
+                ↩ Restore Defaults
+              </button>
+            </div>
           )}
         </div>
       )}

@@ -47,12 +47,16 @@ export default function Dining() {
   const locations = Array.from(new Set(RESTAURANTS.map((r) => r.location))).sort();
 
   const filteredRestaurants = RESTAURANTS.filter((r) => {
-    if (tab === 'Snack Guide') return r.serviceType === 'snack';
-    if (r.serviceType === 'snack' && tab === 'Restaurants') return false;
+    if (tab === 'Snack Guide') {
+      if (r.serviceType !== 'snack') return false;
+      if (search && !r.name.toLowerCase().includes(search.toLowerCase()) && !r.location.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    }
+    if (r.serviceType === 'snack') return false;
     if (serviceFilter !== 'all' && r.serviceType !== serviceFilter) return false;
     if (priceFilter !== 'all' && r.priceTier !== priceFilter) return false;
     if (locationFilter !== 'all' && r.location !== locationFilter) return false;
-    if (search && !r.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !r.name.toLowerCase().includes(search.toLowerCase()) && !r.location.toLowerCase().includes(search.toLowerCase()) && !r.cuisine.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -148,15 +152,23 @@ export default function Dining() {
       {/* Restaurant / Snack tab */}
       {(tab === 'Restaurants' || tab === 'Snack Guide') && (
         <div className="space-y-3">
-          {tab === 'Restaurants' && (
-            <div className="flex gap-2 flex-wrap">
+          {/* Search — always visible for Restaurants and Snack Guide */}
+          <div className="flex gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-40">
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search restaurants..."
-                className="flex-1 min-w-40 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={tab === 'Snack Guide' ? 'Search snacks…' : 'Search restaurants, cuisine, location…'}
+                className="w-full border border-gray-300 rounded-lg pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            {tab === 'Restaurants' && (<>
               <select
                 value={serviceFilter}
                 onChange={(e) => setServiceFilter(e.target.value as ServiceType | 'all')}
@@ -185,8 +197,8 @@ export default function Dining() {
                 <option value="all">All Locations</option>
                 {locations.map((l) => <option key={l} value={l}>{l}</option>)}
               </select>
-            </div>
-          )}
+            </>)}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {filteredRestaurants.map((r) => (

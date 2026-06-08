@@ -216,14 +216,17 @@ export default function TripSetup() {
       }
     }
 
-    // Auto-update Lightning Lane budget category
+    // Auto-update Lightning Lane budget category (create if missing)
     const llEst = computeLLEstimate(partyMembers, localParkDays);
     if (llEst > 0) {
       const llCat = budgetCategories.find(
-        (c) => c.name.toLowerCase().includes('lightning') || c.name.toLowerCase().includes(' ll')
+        (c) => c.name.toLowerCase().includes('lightning') || c.id === 'bc-ll'
       );
       if (llCat) {
         updateBudgetCategory(llCat.id, { plannedAmount: Math.round(llEst) });
+      } else {
+        // Category was deleted — recreate it
+        useStore.getState().addBudgetCategory({ id: 'bc-ll', name: 'Lightning Lane', plannedAmount: Math.round(llEst), actualAmount: 0, paidOff: false, icon: '⚡' });
       }
     }
 
