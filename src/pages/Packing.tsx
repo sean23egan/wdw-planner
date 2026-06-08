@@ -22,6 +22,9 @@ export default function Packing() {
   const addPreTripTask = useStore((s) => s.addPreTripTask);
   const togglePreTripTask = useStore((s) => s.togglePreTripTask);
 
+  // Off-property guests can't pre-book Lightning Lane 7 days out; they book day-of at 7am.
+  const isOffProperty = !trip?.resortName || trip.resortName === 'Off-Property Hotel';
+
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set(PACKING_CATEGORIES));
   const [newItemName, setNewItemName] = useState('');
   const [newItemCat, setNewItemCat] = useState('park-essentials');
@@ -228,7 +231,9 @@ export default function Packing() {
                           </span>
                           {task.name.toLowerCase().includes('lightning lane') && !task.done && (
                             <div className="text-xs mt-0.5 text-blue-600 font-medium">
-                              ⏰ Book at 7pm ET — 7 days before your arrival
+                              {isOffProperty
+                                ? '⏰ Book at 7am ET on each park day (day-of) — off-property guests can’t pre-book'
+                                : '⏰ Book at 7am ET — up to 7 days before your arrival (on-property)'}
                             </div>
                           )}
                           {task.computedDue && (

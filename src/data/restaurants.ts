@@ -1,6 +1,6 @@
 import type { Restaurant } from '../types';
 
-export const RESTAURANTS: Restaurant[] = [
+const RESTAURANTS_RAW: Restaurant[] = [
   // ── MAGIC KINGDOM ─────────────────────────────────────────────────────────
   {
     id: 'mk-be-our-guest',
@@ -1449,3 +1449,16 @@ export const RESTAURANTS: Restaurant[] = [
     description: "Non-dairy frozen drinks inspired by Star Wars — refreshing and unique.",
   },
 ];
+
+// Deduplicate in two passes:
+//  1. by id — guarantees unique React keys (duplicate keys leave stale DOM
+//     nodes that never unmount during filtering, breaking search).
+//  2. by name+location — collapses content duplicates that slipped in with
+//     different ids.
+// Without this, accidental duplicate entries break list filtering/rendering.
+const _byId = Array.from(new Map(RESTAURANTS_RAW.map((r) => [r.id, r])).values());
+export const RESTAURANTS: Restaurant[] = Array.from(
+  new Map(
+    _byId.map((r) => [`${r.name.toLowerCase().replace(/[^a-z0-9]/g, '')}|${r.location.toLowerCase().trim()}`, r])
+  ).values()
+);

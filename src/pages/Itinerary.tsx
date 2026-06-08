@@ -82,7 +82,7 @@ function SortableItem({ item, onRemove }: SortableItemProps) {
         <GripVertical size={16} />
       </button>
       {item.time && (
-        <span className="text-xs text-gray-500 w-16 shrink-0 flex items-center gap-1">
+        <span className="text-xs text-gray-500 w-20 shrink-0 flex items-center gap-1 whitespace-nowrap">
           <Clock size={10} />{fmt12(item.time)}
         </span>
       )}

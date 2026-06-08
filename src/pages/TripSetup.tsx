@@ -6,9 +6,23 @@ import { useAuth } from '../hooks/useAuth';
 import { generateId } from '../utils/ids';
 import { tripDateRange } from '../utils/dates';
 import { sendTripInvite } from '../lib/sync';
-import type { Park, PartyMember, ParkDay, DiningCounts, LLChoice } from '../types';
+import type { Park, PartyMember, ParkDay, DiningCounts, LLChoice, TransportMode } from '../types';
 
 const PARKS: Park[] = ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom'];
+
+// Airport ↔ resort transport, one-way. 'mears' is per person; others are flat per trip.
+const TRANSPORT_OPTIONS: { value: TransportMode; label: string; desc: string; perPerson: boolean; rate: number }[] = [
+  { value: 'none', label: 'None / Own car', desc: 'Driving or rental — no estimate', perPerson: false, rate: 0 },
+  { value: 'rideshare', label: 'Rideshare (Uber/Lyft)', desc: '~$60 each way, whole party', perPerson: false, rate: 60 },
+  { value: 'mears', label: 'Mears Connect (shuttle)', desc: '~$17/person each way', perPerson: true, rate: 17 },
+  { value: 'private', label: 'Private car / town car', desc: '~$200 each way, whole party', perPerson: false, rate: 200 },
+];
+
+function transportLegCost(mode: TransportMode | undefined, paxIncludingToddlers: number): number {
+  const opt = TRANSPORT_OPTIONS.find((o) => o.value === (mode ?? 'none'));
+  if (!opt) return 0;
+  return opt.perPerson ? opt.rate * paxIncludingToddlers : opt.rate;
+}
 
 const RESORT_OPTIONS = [
   { group: 'Value Resorts', options: [
@@ -103,6 +117,8 @@ export default function TripSetup() {
   const [partyMembers, setPartyMembers] = useState<PartyMember[]>(trip?.partyMembers ?? []);
   const [memberEmails, setMemberEmails] = useState<Record<string, string>>({});
   const [diningCounts, setDiningCounts] = useState<DiningCounts>(trip?.diningCounts ?? DEFAULT_DINING);
+  const [arrivalTransport, setArrivalTransport] = useState<TransportMode>(trip?.arrivalTransport ?? 'none');
+  const [departureTransport, setDepartureTransport] = useState<TransportMode>(trip?.departureTransport ?? 'none');
   const [saved, setSaved] = useState(false);
   const [localParkDays, setLocalParkDays] = useState<ParkDay[]>([]);
   const [shareEmail, setShareEmail] = useState('');
@@ -203,7 +219,21 @@ export default function TripSetup() {
       notes,
       giftCardBalance: trip?.giftCardBalance,
       diningCounts,
+      arrivalTransport,
+      departureTransport,
     });
+
+    // Auto-update Transportation budget category (arrival + departure legs)
+    if (transportEstimate > 0) {
+      const transCat = budgetCategories.find(
+        (c) => c.name.toLowerCase().includes('transport') || c.id === 'bc-transport'
+      );
+      if (transCat) {
+        updateBudgetCategory(transCat.id, { plannedAmount: Math.round(transportEstimate) });
+      } else {
+        useStore.getState().addBudgetCategory({ id: 'bc-transport', name: 'Transportation', plannedAmount: Math.round(transportEstimate), actualAmount: 0, paidOff: false, icon: '✈️' });
+      }
+    }
 
     // Auto-update Dining budget category
     const diningEst = computeDiningEstimate(partyMembers, diningCounts);
@@ -261,6 +291,9 @@ export default function TripSetup() {
 
   const diningEstimate = computeDiningEstimate(partyMembers, diningCounts);
   const llEstimate = computeLLEstimate(partyMembers, localParkDays);
+  const transportPax = Math.max(1, partyMembers.length);
+  const transportEstimate =
+    transportLegCost(arrivalTransport, transportPax) + transportLegCost(departureTransport, transportPax);
 
   return (
     <div className="space-y-6">
@@ -537,6 +570,53 @@ export default function TripSetup() {
         )}
         {diningEstimate > 0 && (
           <p className="text-xs text-gray-400 -mt-2">This amount will be applied to your Dining budget category on save.</p>
+        )}
+      </div>
+
+      {/* Airport transportation */}
+      <div className="bg-white rounded-xl shadow-sm p-4 space-y-4">
+        <div>
+          <h2 className="font-bold text-gray-700">Airport Transportation</h2>
+          <p className="text-xs text-gray-400 mt-0.5">How will you get between MCO airport and your resort? Pick each leg separately.</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {([
+            { label: 'Arrival (airport → resort)', value: arrivalTransport, set: setArrivalTransport },
+            { label: 'Departure (resort → airport)', value: departureTransport, set: setDepartureTransport },
+          ] as const).map((leg) => (
+            <div key={leg.label}>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{leg.label}</label>
+              <select
+                value={leg.value}
+                onChange={(e) => leg.set(e.target.value as TransportMode)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {TRANSPORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {TRANSPORT_OPTIONS.find((o) => o.value === leg.value)?.desc}
+                {(() => {
+                  const cost = transportLegCost(leg.value, transportPax);
+                  return cost > 0 ? ` · ~$${cost.toLocaleString('en-US')}` : '';
+                })()}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {transportEstimate > 0 && (
+          <>
+            <div className="flex items-center justify-between rounded-lg bg-sky-50 border border-sky-100 px-4 py-3">
+              <span className="text-sm font-medium text-sky-800">Estimated Round-Trip Transport</span>
+              <span className="text-lg font-bold text-sky-900">
+                ${transportEstimate.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 -mt-2">This amount will be applied to your Transportation budget category on save.</p>
+          </>
         )}
       </div>
 

@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronRight, Calculator, CreditCard } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, CreditCard, RotateCcw } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend,
 } from 'recharts';
-import { useStore } from '../store/useStore';
+import { useStore, isDefaultBudgetCategory } from '../store/useStore';
 import { generateId } from '../utils/ids';
 import { totalPlanned, formatCurrency } from '../utils/budget';
 import { formatDate, tripDateRange } from '../utils/dates';
@@ -12,27 +12,6 @@ const TABS = ['Overview', 'Categories', 'By Day', 'Log Expenses'] as const;
 type Tab = typeof TABS[number];
 
 const CHART_COLORS = ['#1d4ed8','#059669','#d97706','#dc2626','#7c3aed','#db2777','#0891b2','#65a30d','#ea580c','#b45309'];
-
-// Pricing with 6.5% tax and/or 20% tip already baked in
-const DINING_RATES = {
-  // Quick Service — tax only (×1.065), no tip
-  qsBreakfastAdult: 22,   // entrée + coffee
-  qsBreakfastKid: 13,
-  qsDinnerAdultAlcohol: 49,   // 1 entrée + 2 alcoholic drinks
-  qsDinnerAdultNonAlcohol: 31, // 1 entrée + 2 non-alcoholic drinks
-  qsDinnerKid: 19,
-  // Table Service, Non-Character — tax + tip (×1.265)
-  // Formula: (2 entrées + 1 app + 4 alcoholic drinks) ÷ 2 people
-  tableServiceDinnerAdult: 145,
-  tableServiceDinnerKid: 23,
-  // Character Dining — tax + tip (×1.265)
-  characterBreakfastAdult: 73,
-  characterBreakfastKid: 47,
-  characterDinnerAdult: 111,
-  characterDinnerKid: 66,
-};
-
-const LL_RATE_PER_PERSON_PER_DAY = 35;
 
 export default function Budget() {
   const [tab, setTab] = useState<Tab>('Overview');
@@ -52,38 +31,12 @@ export default function Budget() {
   const [editPlanned, setEditPlanned] = useState('');
   const [showAddCat, setShowAddCat] = useState(false);
   const [newCatName, setNewCatName] = useState('');
-  const [showEstimator, setShowEstimator] = useState(false);
 
   // Expense form
   const [expCatId, setExpCatId] = useState(budgetCategories[0]?.id ?? '');
   const [expAmount, setExpAmount] = useState('');
   const [expDesc, setExpDesc] = useState('');
   const [expDate, setExpDate] = useState(new Date().toISOString().split('T')[0]);
-
-  // Dining estimator inputs
-  const adults = trip ? trip.partyMembers.filter((m) => m.role === 'adult').length : 2;
-  const kids = trip ? trip.partyMembers.filter((m) => m.role === 'kid').length : 0;
-  const tripDays = trip ? Math.max(1, tripDateRange(trip.startDate, trip.endDate).length) : 1;
-
-  const dc = trip?.diningCounts;
-  const [estQSBreakfast, setEstQSBreakfast] = useState(dc?.qsBreakfasts ?? tripDays);
-  const [estQSDinner, setEstQSDinner] = useState(dc?.qsDinners ?? tripDays);
-  const [estQSDinnerAlcohol, setEstQSDinnerAlcohol] = useState(dc?.qsDinnerAlcohol ?? true);
-  const [estTableServiceDinner, setEstTableServiceDinner] = useState(dc?.tsDinners ?? 0);
-  const [estCharBfast, setEstCharBfast] = useState(dc?.charBreakfasts ?? 0);
-  const [estCharDinner, setEstCharDinner] = useState(dc?.charDinners ?? 0);
-
-  const diningEstimate =
-    estQSBreakfast * (adults * DINING_RATES.qsBreakfastAdult + kids * DINING_RATES.qsBreakfastKid) +
-    estQSDinner * (
-      adults * (estQSDinnerAlcohol ? DINING_RATES.qsDinnerAdultAlcohol : DINING_RATES.qsDinnerAdultNonAlcohol) +
-      kids * DINING_RATES.qsDinnerKid
-    ) +
-    estTableServiceDinner * (adults * DINING_RATES.tableServiceDinnerAdult + kids * DINING_RATES.tableServiceDinnerKid) +
-    estCharBfast * (adults * DINING_RATES.characterBreakfastAdult + kids * DINING_RATES.characterBreakfastKid) +
-    estCharDinner * (adults * DINING_RATES.characterDinnerAdult + kids * DINING_RATES.characterDinnerKid);
-
-  const llEstimate = (adults + kids) * tripDays * LL_RATE_PER_PERSON_PER_DAY;
 
   // Computed actuals from expenses
   const catActuals = Object.fromEntries(
@@ -126,18 +79,6 @@ export default function Budget() {
     addExpense({ id: generateId(), categoryId: expCatId, amount, date: expDate, description: expDesc });
     setExpAmount('');
     setExpDesc('');
-  };
-
-  const handleApplyDiningEstimate = () => {
-    const cat = budgetCategories.find((c) => c.id === 'bc-dining');
-    if (cat) updateBudgetCategory('bc-dining', { plannedAmount: Math.round(diningEstimate) });
-    setShowEstimator(false);
-    setTab('Categories');
-  };
-
-  const handleApplyLLEstimate = () => {
-    const cat = budgetCategories.find((c) => c.id === 'bc-ll');
-    if (cat) updateBudgetCategory('bc-ll', { plannedAmount: llEstimate });
   };
 
   const sortedExpenses = [...expenses].sort((a, b) => b.date.localeCompare(a.date));
@@ -246,112 +187,6 @@ export default function Budget() {
             </div>
           </div>
 
-          {/* Estimators */}
-          <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
-            <button
-              onClick={() => setShowEstimator(!showEstimator)}
-              className="w-full flex items-center justify-between text-left"
-            >
-              <span className="font-bold text-gray-700 flex items-center gap-2">
-                <Calculator size={16} /> Budget Estimators
-              </span>
-              {showEstimator ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            </button>
-
-            {showEstimator && (
-              <div className="space-y-5 pt-1">
-                {/* Dining estimator */}
-                <div className="border border-gray-100 rounded-lg p-3 space-y-3">
-                  <h3 className="font-semibold text-gray-700 text-sm">🍽️ Dining Estimator</h3>
-                  <p className="text-xs text-gray-500">
-                    Party: {adults} adult{adults !== 1 ? 's' : ''}{kids > 0 ? `, ${kids} kid${kids !== 1 ? 's' : ''}` : ''} · {tripDays} days
-                  </p>
-                  <div className="space-y-3">
-                    {/* QS Breakfast */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">QS Breakfasts</label>
-                        <input type="number" min="0" value={estQSBreakfast}
-                          onChange={(e) => setEstQSBreakfast(Number(e.target.value))}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <div className="text-xs text-gray-400 mt-0.5">${DINING_RATES.qsBreakfastAdult}/adult · ${DINING_RATES.qsBreakfastKid}/kid</div>
-                        <div className="text-xs text-gray-400">entrée + coffee · tax only</div>
-                      </div>
-                      {/* QS Dinner */}
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">QS Dinners</label>
-                        <input type="number" min="0" value={estQSDinner}
-                          onChange={(e) => setEstQSDinner(Number(e.target.value))}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          ${estQSDinnerAlcohol ? DINING_RATES.qsDinnerAdultAlcohol : DINING_RATES.qsDinnerAdultNonAlcohol}/adult · ${DINING_RATES.qsDinnerKid}/kid
-                        </div>
-                        <label className="flex items-center gap-1 text-xs text-gray-500 mt-1 cursor-pointer">
-                          <input type="checkbox" checked={estQSDinnerAlcohol}
-                            onChange={(e) => setEstQSDinnerAlcohol(e.target.checked)} className="rounded" />
-                          Alcoholic drinks
-                        </label>
-                      </div>
-                    </div>
-                    {/* Table Service */}
-                    <div>
-                      <label className="text-xs text-gray-500 block mb-1">Table Service Dinners <span className="text-gray-400">(non-character)</span></label>
-                      <input type="number" min="0" value={estTableServiceDinner}
-                        onChange={(e) => setEstTableServiceDinner(Number(e.target.value))}
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                      <div className="text-xs text-gray-400 mt-0.5">${DINING_RATES.tableServiceDinnerAdult}/adult · ${DINING_RATES.tableServiceDinnerKid}/kid · tax + tip</div>
-                    </div>
-                    {/* Character */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">Character Breakfasts</label>
-                        <input type="number" min="0" value={estCharBfast}
-                          onChange={(e) => setEstCharBfast(Number(e.target.value))}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <div className="text-xs text-gray-400 mt-0.5">${DINING_RATES.characterBreakfastAdult}/adult · ${DINING_RATES.characterBreakfastKid}/kid</div>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">Character Dinners</label>
-                        <input type="number" min="0" value={estCharDinner}
-                          onChange={(e) => setEstCharDinner(Number(e.target.value))}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <div className="text-xs text-gray-400 mt-0.5">${DINING_RATES.characterDinnerAdult}/adult · ${DINING_RATES.characterDinnerKid}/kid</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2">
-                    <span className="text-sm font-semibold text-blue-800">Dining estimate:</span>
-                    <span className="text-lg font-bold text-blue-700">{formatCurrency(diningEstimate)}</span>
-                  </div>
-                  <button
-                    onClick={handleApplyDiningEstimate}
-                    className="w-full bg-blue-700 text-white rounded-lg py-1.5 text-sm font-medium hover:bg-blue-800"
-                  >
-                    Apply to Dining Budget
-                  </button>
-                </div>
-
-                {/* LL estimator */}
-                <div className="border border-gray-100 rounded-lg p-3 space-y-2">
-                  <h3 className="font-semibold text-gray-700 text-sm">⚡ Lightning Lane Estimator</h3>
-                  <p className="text-sm text-gray-600">
-                    {adults + kids} people × {tripDays} days × ${LL_RATE_PER_PERSON_PER_DAY}/person/day
-                  </p>
-                  <div className="flex items-center justify-between bg-amber-50 rounded-lg px-3 py-2">
-                    <span className="text-sm font-semibold text-amber-800">LL estimate:</span>
-                    <span className="text-lg font-bold text-amber-700">{formatCurrency(llEstimate)}</span>
-                  </div>
-                  <button
-                    onClick={handleApplyLLEstimate}
-                    className="w-full bg-amber-500 text-white rounded-lg py-1.5 text-sm font-medium hover:bg-amber-600"
-                  >
-                    Apply to Lightning Lane Budget
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Charts */}
           {chartData.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-4">
@@ -439,9 +274,11 @@ export default function Budget() {
                         </button>
                       </>
                     )}
-                    <button onClick={() => removeBudgetCategory(cat.id)} className="text-gray-300 hover:text-red-400">
-                      <Trash2 size={14} />
-                    </button>
+                    {!isDefaultBudgetCategory(cat) && (
+                      <button onClick={() => removeBudgetCategory(cat.id)} className="text-gray-300 hover:text-red-400" title="Delete category">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="bg-gray-100 rounded-full h-2 mb-2">
@@ -508,10 +345,10 @@ export default function Budget() {
               </button>
               <button
                 onClick={() => restoreMissingBudgetCategories()}
-                className="border-2 border-dashed border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-400 hover:border-green-300 hover:text-green-600 flex items-center gap-1 whitespace-nowrap"
+                className="border-2 border-dashed border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-400 hover:border-green-300 hover:text-green-600 flex items-center gap-1.5 whitespace-nowrap"
                 title="Add back any default categories you removed"
               >
-                ↩ Restore Defaults
+                <RotateCcw size={14} /> Restore Defaults
               </button>
             </div>
           )}

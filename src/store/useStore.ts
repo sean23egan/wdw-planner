@@ -96,6 +96,14 @@ const DEFAULT_BUDGET_CATEGORIES: BudgetCategory[] = [
   { id: 'bc-misc', name: 'Misc / Snacks', plannedAmount: 0, actualAmount: 0, paidOff: false, icon: '🍦' },
 ];
 
+// Default category identity — used to protect presets from deletion. Matches by
+// id (e.g. 'bc-dining') or name, since ids may be regenerated for new trips.
+const DEFAULT_BUDGET_CATEGORY_IDS = new Set(DEFAULT_BUDGET_CATEGORIES.map((c) => c.id));
+const DEFAULT_BUDGET_CATEGORY_NAMES = new Set(DEFAULT_BUDGET_CATEGORIES.map((c) => c.name.toLowerCase()));
+export function isDefaultBudgetCategory(cat: { id: string; name: string }): boolean {
+  return DEFAULT_BUDGET_CATEGORY_IDS.has(cat.id) || DEFAULT_BUDGET_CATEGORY_NAMES.has(cat.name.toLowerCase());
+}
+
 const DEFAULT_PRE_TRIP_TASKS: PreTripTask[] = [
   { id: 'pt-mde-app', name: 'Set up My Disney Experience app', daysBeforeTrip: 90, done: false, category: 'Planning' },
   { id: 'pt-mwr-check', name: 'Check MWR/ITT office for tickets', daysBeforeTrip: 90, done: false, category: 'Tickets' },

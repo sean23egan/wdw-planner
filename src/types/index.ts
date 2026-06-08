@@ -45,6 +45,8 @@ export interface DiningCounts {
   charDinners: number;
 }
 
+export type TransportMode = 'none' | 'rideshare' | 'mears' | 'private';
+
 export interface Trip {
   id: string;
   name: string;
@@ -56,7 +58,11 @@ export interface Trip {
   notes?: string;
   giftCardBalance?: number;
   diningCounts?: DiningCounts;
+  arrivalTransport?: TransportMode;
+  departureTransport?: TransportMode;
 }
+
+export type LLChoice = 'none' | 'multi' | 'single' | 'both';
 
 export interface ParkDay {
   id: string;
@@ -67,6 +73,7 @@ export interface ParkDay {
   hopToPark?: Park;
   hopTime?: string;
   notes?: string;
+  llChoice?: LLChoice;
 }
 
 export interface ItineraryItem {
