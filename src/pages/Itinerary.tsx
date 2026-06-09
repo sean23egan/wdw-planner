@@ -130,7 +130,6 @@ function TimelineView({ items, onRemove }: TimelineViewProps) {
       <div className="divide-y divide-gray-50">
         {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => {
           const hour = HOUR_START + i;
-          const hStr = String(hour).padStart(2, '0');
           const slotItems = timed.filter((item) => {
             const h = parseInt(item.time!.split(':')[0]);
             return h === hour;

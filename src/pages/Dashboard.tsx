@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Calendar, DollarSign, CheckSquare, MapPin, ChevronRight, Plus, Clock,
-  Utensils, CloudSun, TrendingUp, Heart,
+  Utensils, CloudSun, Heart,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { daysUntil, formatDate, isTripActive } from '../utils/dates';
@@ -437,7 +437,6 @@ export default function Dashboard() {
               {upcomingDays.map((d) => {
                 const crowd = getCrowdLevel(d.date);
                 const display = parkDayDisplay(d);
-                const tip = PARK_TIP_BY_DOW[parseISO(d.date).getDay()];
                 return (
                   <div key={d.id} className="flex items-center gap-2 text-sm">
                     <span className="text-gray-500 w-24 shrink-0 text-xs">{formatDate(d.date)}</span>
