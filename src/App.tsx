@@ -14,6 +14,7 @@ import Tickets from './pages/Tickets';
 import SpecialEvents from './pages/SpecialEvents';
 import Packing from './pages/Packing';
 import Settings from './pages/Settings';
+import WishList from './pages/WishList';
 import { useStore } from './store/useStore';
 import { useAuth } from './hooks/useAuth';
 import { loadFromSupabase, scheduleSave } from './lib/sync';
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="/budget" element={<Budget />} />
         <Route path="/packing" element={<Packing />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/wishlist" element={<WishList />} />
       </Routes>
     </Layout>
   );

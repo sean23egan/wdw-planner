@@ -92,6 +92,16 @@ const LL_RATES: Record<Park, { multi: number; single: number }> = {
   'Animal Kingdom':    { multi: 30, single: 30 },
 };
 
+// Ticket price estimates (per person, base park, date-flexible — WDW ~2025 pricing)
+const TICKET_BASE_PRICES: Record<number, { adult: number; kid: number }> = {
+  1: { adult: 150, kid: 145 }, 2: { adult: 280, kid: 268 }, 3: { adult: 365, kid: 350 },
+  4: { adult: 415, kid: 398 }, 5: { adult: 450, kid: 432 }, 6: { adult: 480, kid: 460 },
+  7: { adult: 505, kid: 485 }, 8: { adult: 520, kid: 500 }, 9: { adult: 530, kid: 510 },
+  10: { adult: 540, kid: 520 },
+};
+const PARK_HOPPER_ADD_PER_PERSON = 65; // flat per person, any day count
+const MWR_DISCOUNT = 0.33;             // Military/MWR = ~33% off
+
 // Budget questionnaire rates
 const GROCERY_PER_PERSON_DAY = 13;      // groceries: $/day/person
 const GOLF_TIERS: Record<GolfTier, { label: string; rate: number }> = {
@@ -169,6 +179,17 @@ export default function TripSetup() {
   const [diningCounts, setDiningCounts] = useState<DiningCounts>(trip?.diningCounts ?? DEFAULT_DINING);
   const [arrivalTransport, setArrivalTransport] = useState<TransportMode>(trip?.arrivalTransport ?? 'none');
   const [departureTransport, setDepartureTransport] = useState<TransportMode>(trip?.departureTransport ?? 'none');
+  // Ticket estimator state
+  const [wantsTicketEstimate, setWantsTicketEstimate] = useState(trip?.wantsTicketEstimate ?? false);
+  const [ticketDays, setTicketDays] = useState(() => {
+    if (trip?.ticketDays) return trip.ticketDays.toString();
+    if (trip?.startDate && trip?.endDate && trip.startDate <= trip.endDate) {
+      return String(tripDateRange(trip.startDate, trip.endDate).length || 1);
+    }
+    return '1';
+  });
+  const [ticketParkHopper, setTicketParkHopper] = useState(trip?.ticketParkHopper ?? false);
+  const [ticketMWR, setTicketMWR] = useState(trip?.ticketMWR ?? false);
   // Budget questionnaire state
   const [wantsGroceries, setWantsGroceries] = useState(trip?.wantsGroceries ?? false);
   const [wantsMemoryMaker, setWantsMemoryMaker] = useState(trip?.wantsMemoryMaker ?? false);
@@ -288,6 +309,18 @@ export default function TripSetup() {
   const snackEstimate = Math.max(0, parseFloat(snackBudget) || 0);
   const souvenirEstimate = Math.max(0, parseFloat(souvenirBudget) || 0);
 
+  // Ticket estimate
+  const tDays = Math.min(10, Math.max(1, parseInt(ticketDays) || 1));
+  const tPrices = TICKET_BASE_PRICES[tDays];
+  const adults = partyMembers.filter((m) => m.role === 'adult').length;
+  const kids = partyMembers.filter((m) => m.role === 'kid').length;
+  const ticketSubtotalBeforeDiscount =
+    (adults * (tPrices.adult + (ticketParkHopper ? PARK_HOPPER_ADD_PER_PERSON : 0))) +
+    (kids   * (tPrices.kid  + (ticketParkHopper ? PARK_HOPPER_ADD_PER_PERSON : 0)));
+  const ticketEstimate = wantsTicketEstimate
+    ? Math.round(ticketMWR ? ticketSubtotalBeforeDiscount * (1 - MWR_DISCOUNT) : ticketSubtotalBeforeDiscount)
+    : 0;
+
   const handleSave = async () => {
     if (!name || !startDate || !endDate) return;
 
@@ -299,6 +332,7 @@ export default function TripSetup() {
     // Each questionnaire-driven category: canonical id, display, amount, and whether to
     // overwrite even when the amount is 0 (toggle categories own their value outright).
     const catUpdates: { id: string; name: string; icon: string; amount: number; writeZero: boolean; match: (c: { id: string; name: string }) => boolean }[] = [
+      { id: 'bc-tickets', name: 'Tickets/Passes', icon: '🎫', amount: round(ticketEstimate), writeZero: true, match: (c) => c.id === 'bc-tickets' || c.name.toLowerCase().includes('ticket') || c.name.toLowerCase().includes('pass') },
       { id: 'bc-transport', name: 'Transportation', icon: '✈️', amount: round(transportEstimate), writeZero: false, match: (c) => c.id === 'bc-transport' || c.name.toLowerCase().includes('transport') },
       { id: 'bc-dining', name: 'Dining', icon: '🍽️', amount: round(diningEst), writeZero: false, match: (c) => c.id === 'bc-dining' || c.name.toLowerCase().includes('dining') || c.name.toLowerCase().includes('food') },
       { id: 'bc-ll', name: 'Lightning Lane', icon: '⚡', amount: round(llEst), writeZero: false, match: (c) => c.id === 'bc-ll' || c.name.toLowerCase().includes('lightning') },
@@ -310,6 +344,7 @@ export default function TripSetup() {
       { id: 'bc-gifts', name: 'Gifts/Souvenirs', icon: '🛍️', amount: round(souvenirEstimate), writeZero: true, match: (c) => c.id === 'bc-gifts' || c.name.toLowerCase().includes('souvenir') || c.name.toLowerCase().includes('gift') },
     ];
 
+    const tDaysVal = Math.min(10, Math.max(1, parseInt(ticketDays) || 1));
     const store = useStore.getState();
     const finalById: Record<string, number> = {};
     budgetCategories.forEach((c) => { finalById[c.id] = c.plannedAmount; });
@@ -345,6 +380,10 @@ export default function TripSetup() {
       diningCounts,
       arrivalTransport,
       departureTransport,
+      wantsTicketEstimate,
+      ticketDays: tDaysVal,
+      ticketParkHopper,
+      ticketMWR,
       wantsGroceries,
       wantsMemoryMaker,
       anyPassholder,
@@ -394,12 +433,12 @@ export default function TripSetup() {
 
   // Live overall-budget preview: questionnaire estimates + any non-questionnaire
   // categories already set elsewhere (Tickets, Lodging, custom).
-  const QUESTIONNAIRE_IDS = new Set(['bc-transport', 'bc-dining', 'bc-ll', 'bc-groceries', 'bc-memory-maker', 'bc-events', 'bc-golf', 'bc-misc', 'bc-gifts']);
+  const QUESTIONNAIRE_IDS = new Set(['bc-tickets', 'bc-transport', 'bc-dining', 'bc-ll', 'bc-groceries', 'bc-memory-maker', 'bc-events', 'bc-golf', 'bc-misc', 'bc-gifts']);
   const otherCategoriesTotal = budgetCategories
     .filter((c) => !QUESTIONNAIRE_IDS.has(c.id))
     .reduce((s, c) => s + c.plannedAmount, 0);
   const overallBudgetPreview = Math.round(
-    otherCategoriesTotal + transportEstimate + diningEstimate + llEstimate +
+    otherCategoriesTotal + ticketEstimate + transportEstimate + diningEstimate + llEstimate +
     groceryEstimate + memoryMakerEstimate + specialEventsEstimate + golfEstimate +
     snackEstimate + souvenirEstimate
   );
@@ -856,6 +895,64 @@ export default function TripSetup() {
         <div>
           <h2 className="font-bold text-gray-700">Budget Questions</h2>
           <p className="text-xs text-gray-400 mt-0.5">Answer these and we'll fill each budget category for you. Your overall budget is the sum below.</p>
+        </div>
+
+        {/* Tickets */}
+        <div className="border-b border-gray-100 pb-3">
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm font-medium text-gray-700">🎫 Estimate park ticket cost?</span>
+            <input type="checkbox" checked={wantsTicketEstimate} onChange={(e) => setWantsTicketEstimate(e.target.checked)} className="rounded w-4 h-4 accent-blue-700" />
+          </label>
+          {wantsTicketEstimate && (
+            <div className="mt-3 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Days of tickets</label>
+                  <input
+                    type="number" min="1" max="10" value={ticketDays}
+                    onChange={(e) => setTicketDays(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-0.5">Max 10</p>
+                </div>
+                <div className="space-y-2 pt-1">
+                  <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                    <input type="checkbox" checked={ticketParkHopper} onChange={(e) => setTicketParkHopper(e.target.checked)} className="rounded accent-blue-700" />
+                    Park Hopper (+$65/person)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                    <input type="checkbox" checked={ticketMWR} onChange={(e) => setTicketMWR(e.target.checked)} className="rounded accent-green-600" />
+                    🪖 MWR Discount (–33%)
+                  </label>
+                </div>
+              </div>
+              {(adults + kids) > 0 && (
+                <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
+                  <div className="flex justify-between">
+                    <span>{adults} adult(s) × ${(tPrices.adult + (ticketParkHopper ? PARK_HOPPER_ADD_PER_PERSON : 0)).toLocaleString()}</span>
+                    <span>${(adults * (tPrices.adult + (ticketParkHopper ? PARK_HOPPER_ADD_PER_PERSON : 0))).toLocaleString()}</span>
+                  </div>
+                  {kids > 0 && (
+                    <div className="flex justify-between">
+                      <span>{kids} kid(s) × ${(tPrices.kid + (ticketParkHopper ? PARK_HOPPER_ADD_PER_PERSON : 0)).toLocaleString()}</span>
+                      <span>${(kids * (tPrices.kid + (ticketParkHopper ? PARK_HOPPER_ADD_PER_PERSON : 0))).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {ticketMWR && (
+                    <div className="flex justify-between text-green-700">
+                      <span>MWR discount (–33%)</span>
+                      <span>–${Math.round(ticketSubtotalBeforeDiscount * MWR_DISCOUNT).toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-semibold text-gray-800 pt-1 border-t border-gray-200">
+                    <span>Estimated Total</span>
+                    <span>${ticketEstimate.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-gray-400">Base prices are approximate date-flexible tickets. Check Disney's site or MWR/ITT for exact pricing.</p>
+            </div>
+          )}
         </div>
 
         {/* Groceries */}

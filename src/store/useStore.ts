@@ -4,6 +4,7 @@ import type {
   Trip, ParkDay, ItineraryItem, BudgetCategory, Expense,
   Reservation, GroceryOrder, GroceryItem, DVCMembership, DVCStayOption,
   TicketOption, SpecialEvent, PackingItem, PreTripTask, TripSummary, TripSnapshot,
+  WishListItem,
 } from '../types';
 import { generateId } from '../utils/ids';
 
@@ -25,6 +26,7 @@ interface AppState {
   specialEvents: SpecialEvent[];
   packingItems: PackingItem[];
   preTripTasks: PreTripTask[];
+  wishListItems: WishListItem[];
 
   setTrip: (trip: Trip) => void;
   addParkDay: (day: ParkDay) => void;
@@ -68,6 +70,10 @@ interface AppState {
   removePackingItem: (id: string) => void;
   addPreTripTask: (task: PreTripTask) => void;
   togglePreTripTask: (id: string) => void;
+
+  addWishListItem: (item: WishListItem) => void;
+  removeWishListItem: (id: string) => void;
+  voteWishListItem: (itemId: string, memberId: string, vote: 'yes' | 'maybe' | 'no') => void;
 
   initializeDefaultData: () => void;
   restoreMissingBudgetCategories: () => void;
@@ -155,6 +161,7 @@ export const useStore = create<AppState>()(
       specialEvents: [],
       packingItems: [],
       preTripTasks: [],
+      wishListItems: [],
 
       setTrip: (trip) => {
         set({ trip });
@@ -281,6 +288,19 @@ export const useStore = create<AppState>()(
           preTripTasks: s.preTripTasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
         })),
 
+      addWishListItem: (item) =>
+        set((s) => ({ wishListItems: [...s.wishListItems, item] })),
+      removeWishListItem: (id) =>
+        set((s) => ({ wishListItems: s.wishListItems.filter((i) => i.id !== id) })),
+      voteWishListItem: (itemId, memberId, vote) =>
+        set((s) => ({
+          wishListItems: s.wishListItems.map((item) => {
+            if (item.id !== itemId) return item;
+            const filtered = item.votes.filter((v) => v.memberId !== memberId);
+            return { ...item, votes: [...filtered, { memberId, vote }] };
+          }),
+        })),
+
       getSnapshot: (): TripSnapshot => {
         const s = get();
         return {
@@ -297,6 +317,7 @@ export const useStore = create<AppState>()(
           specialEvents: s.specialEvents,
           packingItems: s.packingItems,
           preTripTasks: s.preTripTasks,
+          wishListItems: s.wishListItems,
         };
       },
 
@@ -328,6 +349,7 @@ export const useStore = create<AppState>()(
           specialEvents: snapshot.specialEvents ?? [],
           packingItems: snapshot.packingItems ?? [],
           preTripTasks: tasks,
+          wishListItems: snapshot.wishListItems ?? [],
         });
       },
 
@@ -365,6 +387,7 @@ export const useStore = create<AppState>()(
           specialEvents: [],
           packingItems: DEFAULT_PACKING_ITEMS.map((p) => ({ ...p, id: generateId() })),
           preTripTasks: DEFAULT_PRE_TRIP_TASKS.map((t) => ({ ...t, id: generateId() })),
+          wishListItems: [],
         });
       },
 
@@ -390,6 +413,7 @@ export const useStore = create<AppState>()(
           specialEvents: snapshot.specialEvents ?? [],
           packingItems: snapshot.packingItems ?? [],
           preTripTasks: snapshot.preTripTasks ?? [],
+          wishListItems: snapshot.wishListItems ?? [],
         });
       },
 
@@ -408,6 +432,7 @@ export const useStore = create<AppState>()(
         specialEvents: [],
         packingItems: [],
         preTripTasks: [],
+        wishListItems: [],
       }),
 
       restoreMissingBudgetCategories: () => {

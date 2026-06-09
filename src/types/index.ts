@@ -23,6 +23,7 @@ export interface TripSnapshot {
   specialEvents: SpecialEvent[];
   packingItems: PackingItem[];
   preTripTasks: PreTripTask[];
+  wishListItems: WishListItem[];
 }
 export type ServiceType = 'table-service' | 'quick-service' | 'snack';
 export type PriceTier = '$' | '$$' | '$$$' | '$$$$';
@@ -62,6 +63,11 @@ export interface Trip {
   diningCounts?: DiningCounts;
   arrivalTransport?: TransportMode;
   departureTransport?: TransportMode;
+  // Ticket estimator
+  wantsTicketEstimate?: boolean;
+  ticketDays?: number;
+  ticketParkHopper?: boolean;
+  ticketMWR?: boolean;
   // Budget questionnaire answers
   wantsGroceries?: boolean;
   wantsMemoryMaker?: boolean;
@@ -220,6 +226,15 @@ export interface SpecialEvent {
   ticketCost?: number;
   notes?: string;
   festivalBoothNotes?: string;
+}
+
+export interface WishListItem {
+  id: string;
+  name: string;
+  type: 'attraction' | 'dining' | 'other';
+  park?: Park;
+  notes?: string;
+  votes: { memberId: string; vote: 'yes' | 'maybe' | 'no' }[];
 }
 
 export interface TicketOption {

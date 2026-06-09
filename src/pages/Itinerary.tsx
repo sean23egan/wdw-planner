@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Zap, Clock, Trash2, GripVertical, Utensils, Star, X } from 'lucide-react';
+import { Plus, Zap, Clock, Trash2, GripVertical, Utensils, Star, X, LayoutList, AlignJustify } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -33,15 +33,6 @@ const TYPE_COLORS: Record<ItemType, string> = {
 };
 
 const OTHER_TYPES: ItemType[] = ['show', 'break', 'event'];
-
-/** Convert "HH:MM" (24h) to "h:MM AM/PM" */
-function fmt12(time: string): string {
-  const [h, m] = time.split(':').map(Number);
-  if (isNaN(h) || isNaN(m)) return time;
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const hr = h % 12 || 12;
-  return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
-}
 
 interface SortableItemProps {
   item: ItineraryItem;
@@ -90,6 +81,84 @@ function SortableItem({ item, onRemove }: SortableItemProps) {
   );
 }
 
+// ── Timeline View Component ───────────────────────────────────────────────────
+const HOUR_START = 7;   // 7 AM
+const HOUR_END   = 23;  // 11 PM
+
+function fmt12(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return time;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hr = h % 12 || 12;
+  return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+const TIMELINE_TYPE_COLORS: Record<string, string> = {
+  attraction: 'bg-blue-100 border-blue-300 text-blue-800',
+  meal:       'bg-orange-100 border-orange-300 text-orange-800',
+  show:       'bg-purple-100 border-purple-300 text-purple-800',
+  event:      'bg-amber-100 border-amber-300 text-amber-800',
+  break:      'bg-gray-100 border-gray-300 text-gray-700',
+};
+
+interface TimelineViewProps {
+  items: ItineraryItem[];
+  onRemove: (id: string) => void;
+}
+
+function TimelineView({ items, onRemove }: TimelineViewProps) {
+  const timed   = items.filter((i) => i.time).sort((a, b) => (a.time! > b.time! ? 1 : -1));
+  const untimed = items.filter((i) => !i.time);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      {/* Unscheduled items */}
+      {untimed.length > 0 && (
+        <div className="border-b border-gray-100 p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Unscheduled</p>
+          {untimed.map((item) => (
+            <div key={item.id} className={`flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm ${TIMELINE_TYPE_COLORS[item.type] ?? 'bg-gray-50 border-gray-200'}`}>
+              <span className="flex-1 font-medium truncate">{item.name}</span>
+              {item.lightningLane && <Zap size={12} className="text-amber-500 shrink-0" />}
+              <button onClick={() => onRemove(item.id)} className="text-gray-400 hover:text-red-400 shrink-0"><X size={13} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Hour rows */}
+      <div className="divide-y divide-gray-50">
+        {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => {
+          const hour = HOUR_START + i;
+          const hStr = String(hour).padStart(2, '0');
+          const slotItems = timed.filter((item) => {
+            const h = parseInt(item.time!.split(':')[0]);
+            return h === hour;
+          });
+          const label = hour === 12 ? '12 PM' : hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
+          return (
+            <div key={hour} className={`flex gap-0 min-h-[2.5rem] ${slotItems.length > 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
+              <div className="w-14 shrink-0 px-2 py-2 text-right">
+                <span className="text-[10px] text-gray-400 font-medium">{label}</span>
+              </div>
+              <div className="flex-1 py-1.5 px-2 space-y-1 border-l border-gray-100">
+                {slotItems.map((item) => (
+                  <div key={item.id} className={`flex items-center gap-2 border rounded-lg px-2.5 py-1 text-xs ${TIMELINE_TYPE_COLORS[item.type] ?? 'bg-gray-50 border-gray-200'}`}>
+                    <span className="text-[10px] font-mono shrink-0 opacity-60">{fmt12(item.time!)}</span>
+                    <span className="flex-1 font-medium truncate">{item.name}</span>
+                    {item.lightningLane && <Zap size={10} className="text-amber-500 shrink-0" />}
+                    <button onClick={() => onRemove(item.id)} className="text-current opacity-40 hover:opacity-80 shrink-0"><X size={11} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Itinerary() {
   const navigate = useNavigate();
   const trip = useStore((s) => s.trip);
@@ -103,6 +172,7 @@ export default function Itinerary() {
   const todayIdx = sortedDays.findIndex((d) => isToday(d.date));
   const [selectedDayIdx, setSelectedDayIdx] = useState(todayIdx >= 0 ? todayIdx : 0);
   const [showOtherForm, setShowOtherForm] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
 
   // "Add other item" form state
   const [newType, setNewType] = useState<ItemType>('show');
@@ -211,6 +281,22 @@ export default function Itinerary() {
         </div>
       </div>
 
+      {/* View toggle */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setViewMode('list')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${viewMode === 'list' ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+        >
+          <AlignJustify size={14} /> List
+        </button>
+        <button
+          onClick={() => setViewMode('timeline')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${viewMode === 'timeline' ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+        >
+          <LayoutList size={14} /> Timeline
+        </button>
+      </div>
+
       {/* Quick-add navigation buttons */}
       <div className="grid grid-cols-2 gap-3">
         <button
@@ -233,38 +319,33 @@ export default function Itinerary() {
           <p className="text-sm">No items planned for this day yet.</p>
           <p className="text-xs mt-1">Use the buttons above to browse attractions and dining.</p>
         </div>
+      ) : viewMode === 'timeline' ? (
+        /* ── Timeline View ────────────────────────────────────────── */
+        <TimelineView items={dayItems} onRemove={removeItineraryItem} />
       ) : (
+        /* ── List View ────────────────────────────────────────────── */
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={dayItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-2">
-              {/* Attractions section */}
               {attractions.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5 px-1">
-                    Attractions ({attractions.length})
-                  </p>
+                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5 px-1">Attractions ({attractions.length})</p>
                   {attractions.map((item) => (
                     <SortableItem key={item.id} item={item} onRemove={removeItineraryItem} />
                   ))}
                 </div>
               )}
-              {/* Meals section */}
               {meals.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide mb-1.5 mt-3 px-1">
-                    Dining ({meals.length})
-                  </p>
+                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide mb-1.5 mt-3 px-1">Dining ({meals.length})</p>
                   {meals.map((item) => (
                     <SortableItem key={item.id} item={item} onRemove={removeItineraryItem} />
                   ))}
                 </div>
               )}
-              {/* Other section */}
               {others.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 mt-3 px-1">
-                    Other ({others.length})
-                  </p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 mt-3 px-1">Other ({others.length})</p>
                   {others.map((item) => (
                     <SortableItem key={item.id} item={item} onRemove={removeItineraryItem} />
                   ))}

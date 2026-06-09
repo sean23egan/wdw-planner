@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Home, Settings2, Calendar, Star, UtensilsCrossed, Ticket,
-  PartyPopper, ShoppingCart, Hotel, DollarSign, Luggage, Settings, MoreHorizontal,
+  PartyPopper, ShoppingCart, Hotel, DollarSign, Luggage, Settings, MoreHorizontal, Heart,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { daysUntil } from '../utils/dates';
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { to: '/lodging', label: 'Lodging', icon: Hotel },
   { to: '/budget', label: 'Budget', icon: DollarSign },
   { to: '/packing', label: 'Prep & Pack', icon: Luggage },
+  { to: '/wishlist', label: 'Wish List', icon: Heart },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
